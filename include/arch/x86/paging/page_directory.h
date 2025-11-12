@@ -19,34 +19,16 @@ typedef struct
             uint32_t avl : 4;      // available for OS
             uint32_t addr : 20;    // [31:12] physical address (aligned)
         } fields;
-        struct
-        {
-            uint32_t data;
-        } raw;
+        uint32_t raw_data;
     };
 
 } pde_t;
-
-/* addr may be in 0x00000000 to 0xFFFFF000 range */
-inline void pde_init(pde_t *entry, uint32_t addr, bool_t rw, bool_t us, bool_t pwt, bool_t pcd, bool_t ps, uint8_t avl)
-{
-    pde_set_addr(entry, addr);
-    pde_set_rw_flag(entry, rw);
-    pde_set_us_flag(entry, us);
-    pde_set_pwt_flag(entry, pwt);
-    pde_set_pcd_flag(entry, pcd);
-    pde_set_ps_flag(entry, ps);
-    pde_set_avl_flag(entry, avl);
-    pde_set_present_flag(entry, 1);
-    entry->fields.accessed = 0;
-    entry->fields.reserved = 0;
-}
 
 /* addr format is addrs from 0x00000000 to 0xFFFFF000 range */
 inline void pde_set_addr(pde_t *entry, uint32_t phys_addr) { entry->fields.addr = phys_addr >> 12; }
 
 /* set flags (lower 12 bits) */
-inline void pde_set_flags(pde_t *entry, uint16_t flags) { entry->raw.data = (entry->raw.data & 0xFFFFF000) | (flags & 0x0FFF); }
+inline void pde_set_flags(pde_t *entry, uint16_t flags) { entry->raw_data = (entry->raw_data & 0xFFFFF000) | (flags & 0x0FFF); }
 
 /* Present
  true = present | false = not present */
@@ -78,3 +60,18 @@ inline void pde_set_avl_flag(pde_t *entry, uint8_t val) { entry->fields.avl = (v
 
 inline uint8_t pde_get_avl_flag(pde_t *entry) { return entry->fields.avl; }
 inline bool_t pde_get_accesed_flag(pde_t *entry) { return entry->fields.accessed; }
+
+/* addr may be in 0x00000000 to 0xFFFFF000 range */
+inline void pde_init(pde_t *entry, uint32_t addr, bool_t rw, bool_t us, bool_t pwt, bool_t pcd, bool_t ps, uint8_t avl)
+{
+    pde_set_addr(entry, addr);
+    pde_set_rw_flag(entry, rw);
+    pde_set_us_flag(entry, us);
+    pde_set_pwt_flag(entry, pwt);
+    pde_set_pcd_flag(entry, pcd);
+    pde_set_ps_flag(entry, ps);
+    pde_set_avl_flag(entry, avl);
+    pde_set_present_flag(entry, 1);
+    entry->fields.accessed = 0;
+    entry->fields.reserved = 0;
+}

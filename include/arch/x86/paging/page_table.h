@@ -20,35 +20,15 @@ typedef struct
             uint32_t avl : 3;      // available for OS
             uint32_t addr : 20;    // [31:12] physical frame address
         } fields;
-
-        struct
-        {
-            uint32_t data;
-        } raw;
+        uint32_t raw_data;
     };
 } pte_t;
-
-/* init */
-inline void pte_init(pte_t *entry, uint32_t addr, bool_t rw, bool_t us, bool_t pwt, bool_t pcd, bool_t pat, bool_t global, uint8_t avl)
-{
-    pte_set_addr(entry, addr);
-    pte_set_rw_flag(entry, rw);
-    pte_set_us_flag(entry, us);
-    pte_set_pwt_flag(entry, pwt);
-    pte_set_pcd_flag(entry, pcd);
-    pte_set_global_flag(entry, global);
-    pte_set_avl_flag(entry, avl);
-    pte_set_present_flag(entry, 1);
-    entry->fields.accessed = 0;
-    entry->fields.dirty = 0;
-    entry->fields.pat = 0;
-}
 
 /* set physical address */
 inline void pte_set_addr(pte_t *entry, uint32_t phys_addr) { entry->fields.addr = phys_addr >> 12; }
 
 /* set flags (lower 12 bits) */
-inline void pte_set_flags(pte_t *entry, uint16_t flags) { entry->raw.data = (entry->raw.data & 0xFFFFF000) | (flags & 0x0FFF); }
+inline void pte_set_flags(pte_t *entry, uint16_t flags) { entry->raw_data = (entry->raw_data & 0xFFFFF000) | (flags & 0x0FFF); }
 
 /* Present
  true = present | false = not present */
@@ -81,3 +61,19 @@ inline void pte_set_avl_flag(pte_t *entry, uint8_t val) { entry->fields.avl = va
 inline uint8_t pte_get_avl_flag(pte_t *entry) { return entry->fields.avl; }
 inline bool_t pte_get_accessed(pte_t *entry) { return entry->fields.accessed; }
 inline bool_t pte_get_dirty(pte_t *entry) { return entry->fields.dirty; }
+
+/* init */
+inline void pte_init(pte_t *entry, uint32_t addr, bool_t rw, bool_t us, bool_t pwt, bool_t pcd, bool_t pat, bool_t global, uint8_t avl)
+{
+    pte_set_addr(entry, addr);
+    pte_set_rw_flag(entry, rw);
+    pte_set_us_flag(entry, us);
+    pte_set_pwt_flag(entry, pwt);
+    pte_set_pcd_flag(entry, pcd);
+    pte_set_global_flag(entry, global);
+    pte_set_avl_flag(entry, avl);
+    pte_set_present_flag(entry, 1);
+    entry->fields.accessed = 0;
+    entry->fields.dirty = 0;
+    entry->fields.pat = 0;
+}
