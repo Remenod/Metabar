@@ -41,3 +41,29 @@ void paging_init(void)
     enable_paging();
     asm volatile("sti");
 }
+
+uint32_t alloc_frame(void)
+{
+    for (uint32_t i = 0; i < TOTAL_FRAMES; ++i)
+    {
+        if (!get_bitmap8_val(avl_phys_pages_bitmap, i))
+        {
+            set_bitmap8_val(avl_phys_pages_bitmap, i, true);
+            return i * PAGE_SIZE;
+        }
+    }
+    return 0;
+}
+
+void free_frame(uint32_t phys_addr)
+{
+    uint32_t frame = phys_addr / PAGE_SIZE;
+    set_bitmap8_val(avl_phys_pages_bitmap, true, false);
+}
+
+uint32_t *alloc_page_table()
+{
+    uint32_t *pt = alloc_frame();
+    memset(pt, 0, 4096);
+    return pt;
+}
