@@ -2,4 +2,4 @@
 
 #include <lib/types.h>
 
-void paging_init(void);
+uint32_t *get_page_directory_vir_addr(void);

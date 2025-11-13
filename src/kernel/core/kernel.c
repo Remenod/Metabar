@@ -8,17 +8,11 @@
 #include <kernel/diagnostics/stack_guard/stack_guard.h>
 #include <kernel/diagnostics/warning_routine.h>
 #include <kernel/settings.h>
-#include <paging/paging.h>
 #include "../../apps/app_selector/app_selector.h"
 
 void kernel_main()
 {
     const char done_text[] = "Done\n";
-    print_char('\n');
-
-    print("Paging Initialization... ");
-    paging_init();
-    print(done_text);
 
     print("Setting Initialization... ");
     settings_init();
