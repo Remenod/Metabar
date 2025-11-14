@@ -1,4 +1,4 @@
-# Bare Metal Snake
+# Metabar
 
 A bare-metal educational operating system project for x86, originally created to implement the classic **Snake** game in protected mode without any external dependencies. The project boots from the **MBR** via BIOS and runs directly on the hardware (or QEMU).  
 
