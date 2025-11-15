@@ -8,16 +8,22 @@
 
 static uint8_t avl_phys_pages_bitmap[TOTAL_FRAMES / 8] = {0};
 
-static pde_t page_directories[64][1024] __attribute__((aligned(4096)));
-static pte_t page_table0[1024] __attribute__((aligned(4096)));
+extern void load_page_directory_extern(pde_t page_dir[1024]);
 
-extern void load_page_directory(pde_t page_dir[1024]);
-
-uint32_t *get_page_directory_vir_addr(void)
+void load_page_directory(pde_t page_dir[1024])
 {
-    return page_directories[0];
+
+    if (page_dir < 0xC0000000)
+        load_page_directory_extern(page_dir);
+    else
+        load_page_directory_extern(vir_to_phys_addr(page_dir));
 }
 
+pde_t *kernel_page_directory = NULL;
+
+extern pde_t bootstrap_page_directory[1024];
+
+/* returns PHYSICAL addres of avaible frame */
 uint32_t alloc_frame(void)
 {
     for (uint32_t i = 0; i < TOTAL_FRAMES; ++i)
