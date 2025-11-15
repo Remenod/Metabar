@@ -43,6 +43,6 @@ SECTIONS
         *(COMMON)
     }
 
-    PROVIDE(_phys_after_bootstrap = __phys_after_bootstrap);
-    PROVIDE(_phys_after_bootstrap_data = __phys_after_bootstrap_data);
+    __phys_after_kernel = ALIGN(__phys_after_bootstrap_data + SIZEOF(.text) + SIZEOF(.rodata) + SIZEOF(.data) + SIZEOF(.bss) , 0x1000);
+
 }
