@@ -13,10 +13,10 @@ __attribute__((section(".bootstrap_rodata"), aligned(4096))) static pte_t bootst
 __attribute__((section(".bootstrap_rodata"), aligned(4096))) static pte_t bootstrap_page_table_kernel[1024] = {0};
 // __attribute__((section(".bootstrap_rodata"), aligned(4096))) static uint8_t bootstrap_avl_phys_pages_bitmap[1024 * 1024 / 8] = {0};
 
-extern uint8_t _phys_after_bootstrap_data; // from linker script
+extern uint8_t __phys_after_bootstrap_data; // from linker script
 
 #define KERNEL_VMA 0xC0000000
-#define KERNEL_PHYS_BASE (uint32_t)&(_phys_after_bootstrap_data)
+#define KERNEL_PHYS_BASE (uint32_t)&(__phys_after_bootstrap_data)
 #define PAGE_LEN 0x1000
 #define PDE_COUNT 1024
 #define AVL_PHYS_PAGES_BITMAP_SIZE 1024 * 1024 / 8
