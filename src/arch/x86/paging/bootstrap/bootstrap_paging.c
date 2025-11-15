@@ -56,15 +56,3 @@ __attribute__((section(".bootstrap"))) void bootstrap_setup_page_directory(void)
 {
     bootstrap_load_page_directory(bootstrap_page_directory);
 }
-
-__attribute__((section(".bootstrap"))) void bootstrap_transfer_bootstrap_temp_entries(void)
-{
-    uint32_t *kernel_page_directory = get_page_directory_vir_addr();
-
-    bootstrap_memcpy(
-        kernel_page_directory,
-        bootstrap_page_directory,
-        PDE_COUNT * sizeof(uint32_t));
-
-    bootstrap_load_page_directory((pde_t *)(kernel_page_directory - KERNEL_VMA));
-}
