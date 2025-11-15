@@ -27,12 +27,10 @@ __attribute__((section(".bootstrap"))) void bootstrap_setup_mapping(void)
     for (uint32_t i = 0; i < 1024; i++)
     {
         // identity mapping for low 4MB (bootstrap)
-        // bootstrap_set_bitmap8_val(bootstrap_avl_phys_pages_bitmap, i, true);
         pte_init(&bootstrap_page_table[i],
                  (uint32_t)(i * PAGE_LEN), 1, 0, 0, 0, 0, 0, 0);
 
         // kernel mapping: virtual (KERNEL_VMA + i*PAGE_LEN) -> physical (KERNEL_PHYS_BASE + i*PAGE_LEN)
-        // bootstrap_set_bitmap8_val(bootstrap_avl_phys_pages_bitmap, i + kernel_phys_page_start, true);
         pte_init(&bootstrap_page_table_kernel[i],
                  (KERNEL_PHYS_BASE + i * PAGE_LEN), 1, 0, 0, 0, 0, 1, 0);
 
