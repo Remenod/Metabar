@@ -5,10 +5,13 @@
 #include <timer/pit.h>
 #include <drivers/vga.h>
 #include <interrupts/cpu_exceptions.h>
+#include <paging/paging.h>
 #include <kernel/diagnostics/stack_guard/stack_guard.h>
 #include <kernel/diagnostics/warning_routine.h>
 #include <kernel/settings.h>
 #include "../../apps/app_selector/app_selector.h"
+
+#include <drivers/qemu_serial.h>
 
 void kernel_main()
 {
@@ -38,13 +41,32 @@ void kernel_main()
     keyboard_install();
     print(done_text);
 
+    uint32_t old_esp;
+    serial_write_char('\n');
+    asm volatile("mov %%esp, %0" : "=r"(old_esp));
+    serial_write_hex_uint32(old_esp);
+    serial_write_char('\n');
+    serial_write_char('\n');
+    serial_write_char('\n');
+
+    print("Kernel Page Dir Initialization... ");
+    init_kernel_page_directory();
+    print(done_text);
+
+    serial_write_char('\n');
+    asm volatile("mov %%esp, %0" : "=r"(old_esp));
+    serial_write_hex_uint32(old_esp); // old esp come back so TODO: fix EBP magic or smt
+    serial_write_char('\n');
+    serial_write_char('\n');
+    serial_write_char('\n');
+
     print("Calibtating kernel warning loop sleep... ");
     init_kernel_warning_routine();
     print(done_text);
 
-    print("Installing Stack Guard... ");
-    stack_guard_install();
-    print(done_text);
+    // print("Installing Stack Guard... ");
+    // stack_guard_install();
+    // print(done_text);
 
     print("Testing VGA modes... ");
     set_graphics_mode();

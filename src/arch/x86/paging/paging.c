@@ -2,9 +2,9 @@
 #include <paging/page_table.h>
 #include <paging/page_directory.h>
 #include <lib/arrlib.h>
+#include <lib/mem.h>
 
-#define PAGE_SIZE 1024 * 4
-#define TOTAL_FRAMES 1024 * 1024
+#include <drivers/qemu_serial.h>
 
 static uint8_t avl_phys_pages_bitmap[TOTAL_FRAMES / 8] = {0};
 
@@ -39,13 +39,69 @@ uint32_t alloc_frame(void)
 
 void free_frame(uint32_t phys_addr)
 {
-    uint32_t frame = phys_addr / PAGE_SIZE;
-    set_bitmap8_val(avl_phys_pages_bitmap, true, false);
+    set_bitmap8_val(avl_phys_pages_bitmap, phys_addr / PAGE_SIZE, false);
 }
 
+/* returns PHYSICAL addres of allocated page table */
 uint32_t *alloc_page_table()
 {
     uint32_t *pt = alloc_frame();
-    memset(pt, 0, 4096);
+    for (int i = 0; i < 1024; i++)
+    {
+        pte_init(&pt[i], NULL, 1, 0, 0, 0, 0, 0, 0);
+        pte_set_present_flag(&pt[i], false);
+    }
     return pt;
+}
+
+/* returns PHYSICAL addres of allocated page directory */
+uint32_t *alloc_page_directory()
+{
+    uint32_t *pt = alloc_frame();
+    for (int i = 0; i < 1024; i++)
+    {
+        pde_init(&pt[i], NULL, 1, 0, 0, 0, 0, 0);
+        pde_set_present_flag(&pt[i], false);
+    }
+    return pt;
+}
+
+static void move_stack_to_high_half(void)
+{
+    uint32_t old_esp;
+    asm volatile("mov %%esp, %0" : "=r"(old_esp));
+    memcpy(HIGH_HALF_STACK_BASE, old_esp, BOOTSTRAP_STACK_TOP - old_esp);
+    // serial_write_char('\n');
+    // serial_write_char('\n');
+    // serial_write_char('\n');
+    // serial_write_hex_uint32(HIGH_HALF_STACK_TOP);
+    // serial_write_char('\n');
+    // serial_write_hex_uint32(HIGH_HALF_STACK_TOP + BOOTSTRAP_STACK_TOP - old_esp);
+    // serial_write_char('\n');
+    // serial_write_char('\n');
+    // serial_write_char('\n');
+    asm volatile("mov %0, %%esp" : : "r"(HIGH_HALF_STACK_TOP + BOOTSTRAP_STACK_TOP - old_esp));
+}
+
+void init_kernel_page_directory(void)
+{
+    asm volatile("cli");
+    move_stack_to_high_half();
+
+    for (int i = 0; i < KERNEL_PHYS_END / PAGE_SIZE; i++)
+        set_bitmap8_val(avl_phys_pages_bitmap, i, true);
+
+    kernel_page_directory = phys_to_vir_addr(alloc_page_directory());
+    memcpy(kernel_page_directory, bootstrap_page_directory, PAGE_SIZE);
+    // kernel_page_directory[0].fields.present = false;
+
+    load_page_directory(kernel_page_directory);
+    uint32_t old_esp;
+    serial_write_char('\n');
+    asm volatile("mov %%esp, %0" : "=r"(old_esp));
+    serial_write_hex_uint32(old_esp);
+    serial_write_char('\n');
+    serial_write_char('\n');
+    serial_write_char('\n');
+    asm volatile("sti");
 }
