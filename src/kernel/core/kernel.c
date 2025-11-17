@@ -25,6 +25,10 @@ void kernel_main()
     idt_install();
     print(done_text);
 
+    print("Kernel Page Dir Initialization... ");
+    init_kernel_page_directory();
+    print(done_text);
+
     print("PIT Initialization... ");
     pit_init(settings_get_int("timer.frequency", 1000));
     print(done_text);
@@ -40,25 +44,6 @@ void kernel_main()
     print("Installing keyboard... ");
     keyboard_install();
     print(done_text);
-
-    uint32_t old_esp;
-    serial_write_char('\n');
-    asm volatile("mov %%esp, %0" : "=r"(old_esp));
-    serial_write_hex_uint32(old_esp);
-    serial_write_char('\n');
-    serial_write_char('\n');
-    serial_write_char('\n');
-
-    print("Kernel Page Dir Initialization... ");
-    init_kernel_page_directory();
-    print(done_text);
-
-    serial_write_char('\n');
-    asm volatile("mov %%esp, %0" : "=r"(old_esp));
-    serial_write_hex_uint32(old_esp); // old esp come back so TODO: fix EBP magic or smt
-    serial_write_char('\n');
-    serial_write_char('\n');
-    serial_write_char('\n');
 
     print("Calibtating kernel warning loop sleep... ");
     init_kernel_warning_routine();

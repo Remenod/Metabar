@@ -17,6 +17,7 @@ extern uint8_t __phys_after_kernel;         // from linker script
 #define HIGH_HALF_STACK_BASE (KERNEL_VMA + (KERNEL_PHYS_END - KERNEL_PHYS_BASE))
 #define HIGH_HALF_STACK_TOP (HIGH_HALF_STACK_BASE + HIGH_HALF_STACK_CAPACITY)
 
+#define BOOTSTRAP_STACK_BASE 0x60000
 #define BOOTSTRAP_STACK_TOP 0x9FFFC
 
 void init_kernel_page_directory(void);

@@ -68,19 +68,28 @@ uint32_t *alloc_page_directory()
 
 static void move_stack_to_high_half(void)
 {
-    uint32_t old_esp;
+    uint32_t old_esp, old_ebp;
     asm volatile("mov %%esp, %0" : "=r"(old_esp));
-    memcpy(HIGH_HALF_STACK_BASE, old_esp, BOOTSTRAP_STACK_TOP - old_esp);
-    // serial_write_char('\n');
-    // serial_write_char('\n');
-    // serial_write_char('\n');
-    // serial_write_hex_uint32(HIGH_HALF_STACK_TOP);
-    // serial_write_char('\n');
-    // serial_write_hex_uint32(HIGH_HALF_STACK_TOP + BOOTSTRAP_STACK_TOP - old_esp);
-    // serial_write_char('\n');
-    // serial_write_char('\n');
-    // serial_write_char('\n');
-    asm volatile("mov %0, %%esp" : : "r"(HIGH_HALF_STACK_TOP + BOOTSTRAP_STACK_TOP - old_esp));
+    asm volatile("mov %%ebp, %0" : "=r"(old_ebp));
+
+    uint32_t offset = HIGH_HALF_STACK_TOP - BOOTSTRAP_STACK_TOP;
+
+    // fix frame chain
+    uint32_t frame = old_ebp;
+    while (frame >= BOOTSTRAP_STACK_BASE && frame <= BOOTSTRAP_STACK_TOP)
+    {
+        uint32_t *next = (uint32_t *)frame;
+        *next += offset;
+        frame = *next;
+    }
+
+    // copy stack contents
+    size_t size = BOOTSTRAP_STACK_TOP - old_esp;
+    memmove((void *)(HIGH_HALF_STACK_TOP - size), (void *)old_esp, size);
+
+    // update registers
+    asm volatile("mov %0, %%esp" ::"r"(HIGH_HALF_STACK_TOP - size));
+    asm volatile("mov %0, %%ebp" ::"r"(old_ebp + offset));
 }
 
 void init_kernel_page_directory(void)
@@ -92,16 +101,9 @@ void init_kernel_page_directory(void)
         set_bitmap8_val(avl_phys_pages_bitmap, i, true);
 
     kernel_page_directory = phys_to_vir_addr(alloc_page_directory());
+
     memcpy(kernel_page_directory, bootstrap_page_directory, PAGE_SIZE);
-    // kernel_page_directory[0].fields.present = false;
 
     load_page_directory(kernel_page_directory);
-    uint32_t old_esp;
-    serial_write_char('\n');
-    asm volatile("mov %%esp, %0" : "=r"(old_esp));
-    serial_write_hex_uint32(old_esp);
-    serial_write_char('\n');
-    serial_write_char('\n');
-    serial_write_char('\n');
-    asm volatile("sti");
+    kernel_page_directory[0].fields.present = false;
 }
