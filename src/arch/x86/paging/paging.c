@@ -1,12 +1,16 @@
 #include <paging/paging.h>
 #include <paging/page_table.h>
 #include <paging/page_directory.h>
+#include <paging/gdt.h>
 #include <lib/arrlib.h>
 #include <lib/mem.h>
 
 #include <drivers/qemu_serial.h>
 
 static uint8_t avl_phys_pages_bitmap[TOTAL_FRAMES / 8] = {0};
+
+static gdt_entry_t kernel_gdt[4] = {0};
+static gdt_ptr_t gp;
 
 extern void load_page_directory_extern(pde_t page_dir[1024]);
 
@@ -92,10 +96,36 @@ static void move_stack_to_high_half(void)
     asm volatile("mov %0, %%ebp" ::"r"(old_ebp + offset));
 }
 
+static void init_kernel_gdt(void)
+{
+    gdte_init_code(&kernel_gdt[1], 0, 0xFFFFF, false, true);
+    gdte_init_data(&kernel_gdt[2], 0, 0xFFFFF, false, true);
+    gdte_init_data(&kernel_gdt[3], 0, 0xFFFFF, true, true);
+    kernel_gdt[2].access.data.present = false;
+
+    gp.limit = (sizeof(kernel_gdt) - 1);
+    gp.base = (uint32_t)&kernel_gdt;
+
+    __asm__ volatile(
+        "lgdt (%0)\n\t"
+        "mov $0x10, %%ax\n\t"
+        "mov %%ax, %%ds\n\t"
+        "mov %%ax, %%es\n\t"
+        "mov %%ax, %%fs\n\t"
+        "mov %%ax, %%gs\n\t"
+        "mov %%ax, %%ss\n\t"
+        "ljmp $0x08, $1f\n\t"
+        "1:\n\t"
+        :
+        : "r"(&gp)
+        : "memory", "ax");
+}
+
 void init_kernel_page_directory(void)
 {
     asm volatile("cli");
     move_stack_to_high_half();
+    init_kernel_gdt();
 
     for (int i = 0; i < KERNEL_PHYS_END / PAGE_SIZE; i++)
         set_bitmap8_val(avl_phys_pages_bitmap, i, true);
@@ -105,5 +135,5 @@ void init_kernel_page_directory(void)
     memcpy(kernel_page_directory, bootstrap_page_directory, PAGE_SIZE);
 
     load_page_directory(kernel_page_directory);
-    kernel_page_directory[0].fields.present = false;
+    // kernel_page_directory[0].fields.present = false;
 }

@@ -25,7 +25,7 @@ typedef struct
     // should be 0
     uint8_t desc_type : 1;
     system_descriptor_type_t type : 4;
-} system_access_byte_t;
+} system_access_byte_t __attribute__((packed));
 
 typedef struct
 {
@@ -38,7 +38,7 @@ typedef struct
     uint8_t conforming : 1;
     uint8_t readable : 1;
     uint8_t accessed : 1;
-} code_access_byte_t;
+} code_access_byte_t __attribute__((packed));
 
 typedef struct
 {
@@ -51,7 +51,7 @@ typedef struct
     uint8_t expand_down : 1;
     uint8_t writeable : 1;
     uint8_t accessed : 1;
-} data_access_byte_t;
+} data_access_byte_t __attribute__((packed));
 
 typedef struct
 {
@@ -79,7 +79,16 @@ typedef struct
     uint8_t limit_high : 4;
     // 8 bits
     uint8_t base_high;
-} gdt_entry_t;
+} gdt_entry_t __attribute__((packed));
+
+typedef struct
+{
+    uint16_t limit;
+    uint32_t base;
+} gdt_ptr_t __attribute__((packed));
 
 void gdte_set_limit(gdt_entry_t *inst, uint32_t lim);
 void gdte_set_base(gdt_entry_t *inst, uint32_t base);
+void gdte_init_code(gdt_entry_t *inst, uint32_t base, uint32_t limit, bool_t conforming, bool_t readable);
+void gdte_init_data(gdt_entry_t *inst, uint32_t base, uint32_t limit, bool_t expand_down, bool_t writeable);
+void gdte_init_system(gdt_entry_t *inst, uint32_t base, uint32_t limit, system_descriptor_type_t type);

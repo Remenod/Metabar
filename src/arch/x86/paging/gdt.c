@@ -12,7 +12,7 @@ void gdte_set_base(gdt_entry_t *inst, uint32_t base)
     inst->base_high = (base & 0xFF000000) >> 24;
 }
 
-void init_code_gdte(gdt_entry_t *inst, uint32_t base, uint32_t limit, uint8_t conforming, uint8_t readable)
+void gdte_init_code(gdt_entry_t *inst, uint32_t base, uint32_t limit, bool_t conforming, bool_t readable)
 {
     gdte_set_limit(inst, limit);
     gdte_set_base(inst, base);
@@ -24,7 +24,7 @@ void init_code_gdte(gdt_entry_t *inst, uint32_t base, uint32_t limit, uint8_t co
     inst->access.code.readable = readable;
 }
 
-void init_data_gdte(gdt_entry_t *inst, uint32_t base, uint32_t limit, uint8_t expand_down, uint8_t writeable)
+void gdte_init_data(gdt_entry_t *inst, uint32_t base, uint32_t limit, bool_t expand_down, bool_t writeable)
 {
     gdte_set_limit(inst, limit);
     gdte_set_base(inst, base);
@@ -36,7 +36,7 @@ void init_data_gdte(gdt_entry_t *inst, uint32_t base, uint32_t limit, uint8_t ex
     inst->access.data.writeable = writeable;
 }
 
-void init_system_gdte(gdt_entry_t *inst, uint32_t base, uint32_t limit, system_descriptor_type_t type)
+void gdte_init_system(gdt_entry_t *inst, uint32_t base, uint32_t limit, system_descriptor_type_t type)
 {
     gdte_set_limit(inst, limit);
     gdte_set_base(inst, base);
