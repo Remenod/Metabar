@@ -9,6 +9,27 @@ void *memcpy(void *dest, const void *src, uint32_t n)
     return dest;
 }
 
+void memmove(void *dst, const void *src, size_t size)
+{
+    if (dst == src || size == 0)
+        return;
+
+    if (dst < src)
+    {
+        uint8_t *d = dst;
+        const unsigned char *s = src;
+        while (size--)
+            *d++ = *s++;
+    }
+    else
+    {
+        uint8_t *d = (uint8_t *)dst + size - 1;
+        const uint8_t *s = (const uint8_t *)src + size - 1;
+        while (size--)
+            *d-- = *s--;
+    }
+}
+
 void *memset(void *dst, int value, unsigned count)
 {
     uint8_t *p = dst;
