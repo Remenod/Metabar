@@ -37,6 +37,8 @@ void kernel_main()
     register_all_cpu_exceptions_isrs();
     print(done_text);
 
+    asm volatile("sti");
+
     print("Installing mouse... ");
     mouse_install();
     print(done_text);
