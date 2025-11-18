@@ -20,7 +20,7 @@ extern uint8_t __phys_after_kernel;         // from linker script
 #define BOOTSTRAP_STACK_BASE 0x60000
 #define BOOTSTRAP_STACK_TOP 0x9FFFC
 
-void init_kernel_page_directory(void);
+void setup_high_half_selfcontained_paging(void);
 
 inline void *phys_to_vir_addr(uint32_t phys)
 {

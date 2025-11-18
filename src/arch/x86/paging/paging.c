@@ -9,7 +9,7 @@
 
 static uint8_t avl_phys_pages_bitmap[TOTAL_FRAMES / 8] = {0};
 
-static gdt_entry_t kernel_gdt[4] = {0};
+static gdt_entry_t kernel_gdt[6] = {0};
 static gdt_ptr_t gp;
 
 extern void load_page_directory_extern(pde_t page_dir[1024]);
@@ -98,12 +98,10 @@ static void move_stack_to_high_half(void)
 
 static void init_kernel_gdt(void)
 {
-    gdte_init_code(&kernel_gdt[1], 0, 0xFFFFF, false, true);
-    gdte_init_data(&kernel_gdt[2], 0, 0xFFFFF, false, true);
-    gdte_init_data(&kernel_gdt[3], 0, 0xFFFFF, true, true);
-    kernel_gdt[2].access.data.present = false;
+    asm volatile("sgdt %0" : "=m"(gp));
 
-    gp.limit = (sizeof(kernel_gdt) - 1);
+    memcpy(kernel_gdt, gp.base, gp.limit);
+
     gp.base = (uint32_t)&kernel_gdt;
 
     __asm__ volatile(
@@ -121,7 +119,7 @@ static void init_kernel_gdt(void)
         : "memory", "ax");
 }
 
-void init_kernel_page_directory(void)
+void setup_high_half_selfcontained_paging(void)
 {
     asm volatile("cli");
     move_stack_to_high_half();
@@ -134,6 +132,7 @@ void init_kernel_page_directory(void)
 
     memcpy(kernel_page_directory, bootstrap_page_directory, PAGE_SIZE);
 
+    kernel_page_directory[0].fields.present = false;
+
     load_page_directory(kernel_page_directory);
-    // kernel_page_directory[0].fields.present = false;
 }
