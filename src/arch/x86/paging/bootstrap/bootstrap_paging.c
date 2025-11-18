@@ -2,7 +2,9 @@
 #include <paging/page_table.h>
 #include <paging/page_directory.h>
 #include <paging/bootstrap/lib.h>
-#include <paging/paging.h> // only 4 get_page_directories_vir_addr after mapping kernel n enabling paging
+#include <paging/paging.h> // only for get_page_directories_vir_addr after mapping kernel n enabling paging
+
+#include <paging/bootstrap/bootstrap_qemu_serial.h>
 
 __attribute__((section(".bootstrap"))) extern void bootstrap_load_page_directory(pde_t page_dir[1024]);
 __attribute__((section(".bootstrap"))) extern void bootstrap_enable_global_pages(void);
@@ -19,6 +21,35 @@ extern uint8_t __phys_after_bootstrap_data; // from linker script
 #define PAGE_LEN 0x1000
 #define PDE_COUNT 1024
 #define AVL_PHYS_PAGES_BITMAP_SIZE 1024 * 1024 / 8
+__attribute__((section(".bootstrap"))) void bootstrap_dump_mappings(pde_t *page_directory)
+{
+    for (uint32_t pdi = 0; pdi < 1024; pdi++)
+    {
+        pde_t pde = page_directory[pdi];
+        if (!pde.fields.present)
+            continue;
+        if (pde.fields.ps)
+            continue;
+
+        pte_t *page_table = (pte_t *)(pde.fields.addr << 12);
+
+        for (uint32_t pti = 0; pti < 1024; pti++)
+        {
+            pte_t pte = page_table[pti];
+            if (!pte.fields.present)
+                continue;
+
+            uint32_t virt = (pdi << 22) | (pti << 12);
+            uint32_t phys = pte.fields.addr << 12;
+
+            bootstrap_serial_write_hex_uint32(phys);
+            bootstrap_serial_write_char('-');
+            bootstrap_serial_write_char('>');
+            bootstrap_serial_write_hex_uint32(virt);
+            bootstrap_serial_write_char('\n');
+        }
+    }
+}
 
 __attribute__((section(".bootstrap"))) void bootstrap_setup_mapping(void)
 {
@@ -47,6 +78,7 @@ __attribute__((section(".bootstrap"))) void bootstrap_setup_mapping(void)
     // If bootstrap_page_table is identity-mapped and its address equals its physical address, this is OK:
     pde_init(&bootstrap_page_directory[0], (uint32_t)bootstrap_page_table, 1, 0, 0, 0, 0, 0);
     pde_init(&bootstrap_page_directory[dir_index_kernel], bootstrap_page_table_kernel, 1, 0, 0, 0, 0, 0);
+    // bootstrap_dump_mappings(&bootstrap_page_directory);
 }
 
 __attribute__((section(".bootstrap"))) void bootstrap_setup_page_directory(void)
