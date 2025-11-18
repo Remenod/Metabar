@@ -13,6 +13,7 @@ __attribute__((section(".bootstrap"))) extern void bootstrap_enable_paging(void)
 __attribute__((section(".bootstrap_rodata"), aligned(4096))) pde_t bootstrap_page_directory[1024] = {0};
 __attribute__((section(".bootstrap_rodata"), aligned(4096))) pte_t bootstrap_page_table[1024] = {0};
 __attribute__((section(".bootstrap_rodata"), aligned(4096))) pte_t bootstrap_page_table_kernel[1024] = {0};
+__attribute__((section(".bootstrap_rodata"), aligned(4096))) pte_t bootstrap_page_table_vga_vram[1024] = {0};
 
 extern uint8_t __phys_after_bootstrap_data; // from linker script
 
@@ -21,6 +22,10 @@ extern uint8_t __phys_after_bootstrap_data; // from linker script
 #define PAGE_LEN 0x1000
 #define PDE_COUNT 1024
 #define AVL_PHYS_PAGES_BITMAP_SIZE 1024 * 1024 / 8
+#define VGA_PHYS_START 0xA0000
+#define VGA_PHYS_END 0xBFFFF
+#define VGA_VIRT_START 0xC10A0000
+
 __attribute__((section(".bootstrap"))) void bootstrap_dump_mappings(pde_t *page_directory)
 {
     for (uint32_t pdi = 0; pdi < 1024; pdi++)
@@ -51,6 +56,21 @@ __attribute__((section(".bootstrap"))) void bootstrap_dump_mappings(pde_t *page_
     }
 }
 
+__attribute__((section(".bootstrap"))) static void bootstrap_remap_vga_vram(void)
+{
+    const uint32_t pde_index = VGA_VIRT_START >> 22;
+
+    pde_init(&bootstrap_page_directory[pde_index], (uint32_t)bootstrap_page_table_vga_vram, 1, 0, 0, 0, 0, 0);
+
+    uint32_t phys = VGA_PHYS_START;
+    uint32_t virt = VGA_VIRT_START;
+
+    for (int i = 0; phys <= VGA_PHYS_END; i++, phys += 0x1000, virt += 0x1000)
+    {
+        pte_init(&bootstrap_page_table_vga_vram[i], phys, 1, 0, 0, 1, 0, 1, 0);
+    }
+}
+
 __attribute__((section(".bootstrap"))) void bootstrap_setup_mapping(void)
 {
     const uint32_t kernel_phys_page_start = KERNEL_PHYS_BASE / PAGE_LEN;
@@ -68,16 +88,11 @@ __attribute__((section(".bootstrap"))) void bootstrap_setup_mapping(void)
         // note: simplify: (kernel_phys_page_start + i) * PAGE_LEN
     }
 
-    for (uint32_t i = 1; i < 1024; i++)
-    {
-        pde_init(&bootstrap_page_directory[i], (uint32_t)bootstrap_page_table, 0, 0, 0, 0, 0, 0);
-        pde_set_present_flag(&bootstrap_page_directory[i], 0);
-    }
-
     // make sure you pass *physical* address of page tables into PDEs.
     // If bootstrap_page_table is identity-mapped and its address equals its physical address, this is OK:
     pde_init(&bootstrap_page_directory[0], (uint32_t)bootstrap_page_table, 1, 0, 0, 0, 0, 0);
     pde_init(&bootstrap_page_directory[dir_index_kernel], bootstrap_page_table_kernel, 1, 0, 0, 0, 0, 0);
+    bootstrap_remap_vga_vram();
     // bootstrap_dump_mappings(&bootstrap_page_directory);
 }
 
