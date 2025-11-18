@@ -321,6 +321,8 @@ void mouse_handler(void)
 
 void mouse_install(void)
 {
+    asm volatile("sti"); // intended
+
     pic_unmask_irq(2);
     pic_unmask_irq(12);
 
