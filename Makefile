@@ -77,7 +77,7 @@ run: $(IMAGE)
 	qemu-system-i386 -serial stdio -drive file=$(IMAGE),format=raw 
 	# -d int,cpu_reset -no-reboot -no-shutdown
 
-run --debug: $(IMAGE)
+run_debug: $(IMAGE)
 	qemu-system-i386 -serial stdio -drive file=$(IMAGE),format=raw -d int,cpu_reset -no-reboot -no-shutdown
 
 clean:
