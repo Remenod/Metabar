@@ -11,8 +11,6 @@
 #include <kernel/settings.h>
 #include "../../apps/app_selector/app_selector.h"
 
-#include <drivers/qemu_serial.h>
-
 void kernel_main()
 {
     asm volatile("cli");
@@ -47,19 +45,19 @@ void kernel_main()
     keyboard_install();
     print(done_text);
 
-    // print("Calibtating kernel warning loop sleep... ");
-    // init_kernel_warning_routine();
-    // print(done_text);
+    print("Calibtating kernel warning loop sleep... ");
+    init_kernel_warning_routine();
+    print(done_text);
 
     // print("Installing Stack Guard... ");
     // stack_guard_install();
     // print(done_text);
 
-    // print("Testing VGA modes... ");
-    // set_graphics_mode();
-    // draw_mode13h_test_pattern();
-    // set_text_mode();
-    // print(done_text);
+    print("Testing VGA modes... ");
+    set_graphics_mode();
+    draw_mode13h_test_pattern();
+    set_text_mode();
+    print(done_text);
 
     clear_screen();
 
