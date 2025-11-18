@@ -25,7 +25,7 @@ typedef struct
     // should be 0
     uint8_t desc_type : 1;
     system_descriptor_type_t type : 4;
-} system_access_byte_t __attribute__((packed));
+} __attribute__((packed)) system_access_byte_t;
 
 typedef struct
 {
@@ -38,7 +38,7 @@ typedef struct
     uint8_t conforming : 1;
     uint8_t readable : 1;
     uint8_t accessed : 1;
-} code_access_byte_t __attribute__((packed));
+} __attribute__((packed)) code_access_byte_t;
 
 typedef struct
 {
@@ -51,7 +51,7 @@ typedef struct
     uint8_t expand_down : 1;
     uint8_t writeable : 1;
     uint8_t accessed : 1;
-} data_access_byte_t __attribute__((packed));
+} __attribute__((packed)) data_access_byte_t;
 
 typedef struct
 {
@@ -79,13 +79,13 @@ typedef struct
     uint8_t limit_high : 4;
     // 8 bits
     uint8_t base_high;
-} gdt_entry_t __attribute__((packed));
+} __attribute__((packed)) gdt_entry_t;
 
 typedef struct
 {
     uint16_t limit;
     uint32_t base;
-} gdt_ptr_t __attribute__((packed));
+} __attribute__((packed)) gdt_ptr_t;
 
 void gdte_set_limit(gdt_entry_t *inst, uint32_t lim);
 void gdte_set_base(gdt_entry_t *inst, uint32_t base);
