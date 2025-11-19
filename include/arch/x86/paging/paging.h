@@ -1,6 +1,7 @@
 #pragma once
 
 #include <lib/types.h>
+#include <paging/page_directory.h>
 
 extern uint8_t __phys_after_bootstrap_data; // from linker script
 extern uint8_t __phys_after_kernel;         // from linker script
