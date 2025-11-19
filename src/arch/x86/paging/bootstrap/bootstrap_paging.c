@@ -2,7 +2,6 @@
 #include <paging/page_table.h>
 #include <paging/page_directory.h>
 #include <paging/bootstrap/lib.h>
-#include <paging/paging.h> // only for get_page_directories_vir_addr after mapping kernel n enabling paging
 
 #include <paging/bootstrap/bootstrap_qemu_serial.h>
 
@@ -73,30 +72,24 @@ __attribute__((section(".bootstrap"))) static void bootstrap_remap_vga_vram(void
 
 __attribute__((section(".bootstrap"))) void bootstrap_setup_mapping(void)
 {
-    const uint32_t kernel_phys_page_start = KERNEL_PHYS_BASE / PAGE_LEN;
-    const uint32_t dir_index_kernel = KERNEL_VMA / (PAGE_LEN * 1024);
+    const uint32_t dir_index_kernel = KERNEL_VMA >> 22;
+    const uint32_t dir_index_vga = VGA_VIRT_START >> 22;
+
     for (uint32_t i = 0; i < 1024; i++)
     {
-        // identity mapping for low 4MB (bootstrap)
-        pte_init(&bootstrap_page_table[i],
-                 (uint32_t)(i * PAGE_LEN), 1, 0, 0, 0, 0, 0, 0);
+        pte_init(&bootstrap_page_table[i], i * PAGE_LEN, 1, 0, 0, 0, 0, 0, 0);
 
-        // kernel mapping: virtual (KERNEL_VMA + i*PAGE_LEN) -> physical (KERNEL_PHYS_BASE + i*PAGE_LEN)
-        pte_init(&bootstrap_page_table_kernel[i],
-                 (KERNEL_PHYS_BASE + i * PAGE_LEN), 1, 0, 0, 0, 0, 1, 0);
+        pte_init(&bootstrap_page_table_kernel[i], KERNEL_PHYS_BASE + i * PAGE_LEN, 1, 0, 0, 0, 0, 0, 0);
 
-        // note: simplify: (kernel_phys_page_start + i) * PAGE_LEN
+        pte_init(&bootstrap_page_table_vga_vram[i], VGA_PHYS_START + i * PAGE_LEN, 1, 0, 0, 0, 0, 0, 0);
     }
 
-    // make sure you pass *physical* address of page tables into PDEs.
-    // If bootstrap_page_table is identity-mapped and its address equals its physical address, this is OK:
-    pde_init(&bootstrap_page_directory[0], (uint32_t)bootstrap_page_table, 1, 0, 0, 0, 0, 0);
-    pde_init(&bootstrap_page_directory[dir_index_kernel], bootstrap_page_table_kernel, 1, 0, 0, 0, 0, 0);
-    bootstrap_remap_vga_vram();
-    // bootstrap_dump_mappings(&bootstrap_page_directory);
-}
+    pde_init(&bootstrap_page_directory[0], (uint32_t)bootstrap_page_table, 1, 1, 0, 0, 0, 0);
+    pde_init(&bootstrap_page_directory[dir_index_kernel], (uint32_t)bootstrap_page_table_kernel, 1, 0, 0, 0, 0, 0);
+    pde_init(&bootstrap_page_directory[dir_index_vga], (uint32_t)bootstrap_page_table_vga_vram, 1, 0, 0, 0, 0, 0);
 
-__attribute__((section(".bootstrap"))) void bootstrap_setup_page_directory(void)
-{
+    pde_init(&bootstrap_page_directory[1023], (uint32_t)bootstrap_page_directory, 1, 1, 0, 0, 0, 0);
+
+    bootstrap_remap_vga_vram();
     bootstrap_load_page_directory(bootstrap_page_directory);
 }

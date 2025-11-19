@@ -27,7 +27,21 @@ pde_t *kernel_page_directory = NULL;
 
 extern pde_t bootstrap_page_directory[1024];
 
-/* returns PHYSICAL addres of avaible frame */
+// apply PDE changes in PD
+static inline void flush_tlb(void)
+{
+    uint32_t cr3;
+    asm volatile("mov %%cr3, %0" : "=r"(cr3));
+    asm volatile("mov %0, %%cr3" ::"r"(cr3));
+}
+
+// apply PDE changes in PD for specific addr
+static inline void invlpg(void *addr)
+{
+    asm volatile("invlpg (%0)" ::"r"(addr) : "memory");
+}
+
+// returns PHYSICAL addres of avaible frame
 uint32_t alloc_frame(void)
 {
     for (uint32_t i = 0; i < TOTAL_FRAMES; ++i)
@@ -41,36 +55,125 @@ uint32_t alloc_frame(void)
     return 0;
 }
 
+// set page that phys addr came from as avaible
 void free_frame(uint32_t phys_addr)
 {
     set_bitmap8_val(avl_phys_pages_bitmap, phys_addr / PAGE_SIZE, false);
 }
 
-/* returns PHYSICAL addres of allocated page table */
-uint32_t *alloc_page_table()
+// returns PHYSICAL addres of avaible frame
+static uint32_t alloc_page_table_phys(void)
 {
-    uint32_t *pt = alloc_frame();
+    return alloc_frame();
+}
+
+// returns PHYSICAL addres of avaible frame
+static uint32_t alloc_page_directory_phys(void)
+{
+    return alloc_frame();
+}
+
+// returns VIRTUAL addres of current page dir
+static inline volatile pde_t *get_pd_virt()
+{
+    return (volatile pde_t *)0xFFFFF000;
+}
+
+// returns VIRTUAL address of page table mapped at given PD index
+static inline volatile pte_t *get_pt_virt(uint32_t pd_index)
+{
+    return (volatile pte_t *)(0xFFC00000 + (pd_index << 12));
+}
+
+// returns POINTER to PDE entry for provided virtual address
+static inline volatile pde_t *get_pde(uint32_t virt)
+{
+    return &get_pd_virt()[virt >> 22];
+}
+
+// returns POINTER to PTE entry for provided virtual address
+static inline volatile pte_t *get_pte(uint32_t virt)
+{
+    uint32_t pd_index = virt >> 22;
+    uint32_t pt_index = (virt >> 12) & 0x3FF;
+    return &get_pt_virt(pd_index)[pt_index];
+}
+
+// creates new page table entry in PD and returns VIRTUAL pointer to the PT
+volatile pte_t *alloc_page_table_virtual(uint32_t pd_index, uint32_t phys_pt)
+{
+    volatile pde_t *pd = get_pd_virt();
+    pd[pd_index].fields.addr = phys_pt >> 12;
+    pd[pd_index].fields.present = 1;
+    pd[pd_index].fields.rw = 1;
+    pd[pd_index].fields.us = 0;
+
+    uint32_t cr3;
+    asm volatile("mov %%cr3, %0" : "=r"(cr3));
+    asm volatile("mov %0, %%cr3" ::"r"(cr3));
+
+    volatile pte_t *pt = get_pt_virt(pd_index);
     for (int i = 0; i < 1024; i++)
     {
-        pte_init(&pt[i], NULL, 1, 0, 0, 0, 0, 0, 0);
-        pte_set_present_flag(&pt[i], false);
+        pt[i].raw_data = 0;
     }
     return pt;
 }
 
-/* returns PHYSICAL addres of allocated page directory */
-uint32_t *alloc_page_directory()
+// maps given VIRTUAL page to PHYSICAL address with provided flags
+void map_page(uint32_t virt, uint32_t phys, uint32_t flags)
 {
-    uint32_t *pt = alloc_frame();
-    for (int i = 0; i < 1024; i++)
+    volatile pde_t *pde = get_pde(virt);
+    if (!pde->fields.present)
     {
-        pde_init(&pt[i], NULL, 1, 0, 0, 0, 0, 0);
-        pde_set_present_flag(&pt[i], false);
+        uint32_t pt_phys = alloc_page_table_phys();
+        alloc_page_table_virtual(virt >> 22, pt_phys);
     }
-    return pt;
+
+    volatile pte_t *pte = get_pte(virt);
+    pte->fields.addr = phys >> 12;
+    pte->fields.present = 1;
+    pte->fields.rw = (flags & 2) != 0;
+    pte->fields.us = (flags & 4) != 0;
+
+    asm volatile("invlpg (%0)" ::"r"(virt));
 }
 
-static void move_stack_to_high_half(void)
+// unmaps given VIRTUAL page if it is present in page table
+void unmap_page(uint32_t virt)
+{
+    volatile pte_t *pte = get_pte(virt);
+    if (pte->fields.present)
+    {
+        pte->raw_data = 0;
+        asm volatile("invlpg (%0)" ::"r"(virt));
+    }
+}
+
+// creates new page directory, initializes self-mapping, returns VIRTUAL PD address
+volatile pde_t *create_page_directory(void)
+{
+    uint32_t phys_pd = alloc_page_directory_phys();
+
+    volatile pde_t *pd_temp = (volatile pde_t *)TEMP_PD_VADDR;
+
+    map_page(TEMP_PD_VADDR, phys_pd, PAGE_PRESENT | PAGE_RW);
+
+    for (int i = 0; i < 1024; i++)
+        pd_temp[i].raw_data = 0;
+
+    pd_temp[1023].fields.addr = phys_pd >> 12;
+    pd_temp[1023].fields.present = 1;
+    pd_temp[1023].fields.rw = 1;
+
+    // asm volatile("mov %0, %%cr3" ::"r"(phys_pd));
+
+    unmap_page(TEMP_PD_VADDR);
+
+    return (volatile pde_t *)0xFFFFF000;
+}
+
+static inline void move_stack_to_high_half(void)
 {
     uint32_t old_esp, old_ebp;
     asm volatile("mov %%esp, %0" : "=r"(old_esp));
@@ -96,7 +199,7 @@ static void move_stack_to_high_half(void)
     asm volatile("mov %0, %%ebp" ::"r"(old_ebp + offset));
 }
 
-static void init_kernel_gdt(void)
+static inline void init_kernel_gdt(void)
 {
     asm volatile("sgdt %0" : "=m"(gp));
 
@@ -128,11 +231,28 @@ void setup_high_half_selfcontained_paging(void)
     for (int i = 0; i < KERNEL_PHYS_END / PAGE_SIZE; i++)
         set_bitmap8_val(avl_phys_pages_bitmap, i, true);
 
-    kernel_page_directory = phys_to_vir_addr(alloc_page_directory());
+    for (int i = 0xA0000; i <= 0xBFFFF; i++)
+        set_bitmap8_val(avl_phys_pages_bitmap, i / PAGE_SIZE, true);
 
-    memcpy(kernel_page_directory, bootstrap_page_directory, PAGE_SIZE);
+    uint32_t kernel_pd_phys = alloc_page_directory_phys();
+    if (!kernel_pd_phys)
+        return;
 
-    kernel_page_directory[0].fields.present = false;
+    map_page(TEMP_PD_VADDR, kernel_pd_phys, PAGE_PRESENT | PAGE_RW);
 
-    load_page_directory(kernel_page_directory);
+    volatile pde_t *pd_temp = (volatile pde_t *)TEMP_PD_VADDR;
+
+    memcpy((void *)pd_temp, (const void *)bootstrap_page_directory, PAGE_SIZE);
+
+    pd_temp[0].fields.present = 0;
+
+    pd_temp[1023].fields.addr = kernel_pd_phys >> 12;
+    pd_temp[1023].fields.present = 1;
+    pd_temp[1023].fields.rw = 1;
+
+    flush_tlb();
+
+    unmap_page(TEMP_PD_VADDR);
+
+    load_page_directory_extern((pde_t *)kernel_pd_phys);
 }
