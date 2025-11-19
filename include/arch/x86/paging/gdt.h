@@ -84,7 +84,7 @@ typedef struct
 typedef struct
 {
     uint16_t limit;
-    uint32_t base;
+    gdt_entry_t *base;
 } __attribute__((packed)) gdt_ptr_t;
 
 void gdte_set_limit(gdt_entry_t *inst, uint32_t lim);

@@ -75,5 +75,5 @@ inline void pte_init(pte_t *entry, uint32_t addr, bool_t rw, bool_t us, bool_t p
     pte_set_present_flag(entry, 1);
     entry->fields.accessed = 0;
     entry->fields.dirty = 0;
-    entry->fields.pat = 0;
+    entry->fields.pat = pat;
 }

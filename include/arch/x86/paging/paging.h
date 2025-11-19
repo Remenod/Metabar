@@ -32,9 +32,9 @@ inline void *phys_to_vir_addr(uint32_t phys)
     return (void *)((phys - KERNEL_PHYS_BASE) + KERNEL_VMA);
 }
 
-inline uint32_t vir_to_phys_addr(void *virt)
+inline void *vir_to_phys_addr(void *virt)
 {
-    return ((uint32_t)virt - KERNEL_VMA) + KERNEL_PHYS_BASE;
+    return (void *)(((uint32_t)virt - KERNEL_VMA) + KERNEL_PHYS_BASE);
 }
 
 void map_page(uint32_t virt, uint32_t phys, uint32_t flags);

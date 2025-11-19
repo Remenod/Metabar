@@ -10,7 +10,7 @@ char print_dec_buf[12];
 
 void put_char(uint16_t pos, unsigned char c)
 {
-    if (pos < 0 || pos > 1999)
+    if (pos > 1999)
         return;
     vga[pos] = (vga[pos] & 0b1111111100000000) | c;
 }

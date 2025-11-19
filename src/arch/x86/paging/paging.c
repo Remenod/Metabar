@@ -17,7 +17,7 @@ extern void load_page_directory_extern(pde_t page_dir[1024]);
 void load_page_directory(pde_t page_dir[1024])
 {
 
-    if (page_dir < 0xC0000000)
+    if ((uint32_t)page_dir < 0xC0000000)
         load_page_directory_extern(page_dir);
     else
         load_page_directory_extern(vir_to_phys_addr(page_dir));
@@ -205,7 +205,7 @@ static inline void init_kernel_gdt(void)
 
     memcpy(kernel_gdt, gp.base, gp.limit);
 
-    gp.base = (uint32_t)&kernel_gdt;
+    gp.base = (gdt_entry_t *)&kernel_gdt;
 
     __asm__ volatile(
         "lgdt (%0)\n\t"
@@ -228,7 +228,7 @@ void setup_high_half_selfcontained_paging(void)
     move_stack_to_high_half();
     init_kernel_gdt();
 
-    for (int i = 0; i < KERNEL_PHYS_END / PAGE_SIZE; i++)
+    for (uint32_t i = 0; i < KERNEL_PHYS_END / PAGE_SIZE; i++)
         set_bitmap8_val(avl_phys_pages_bitmap, i, true);
 
     for (int i = 0xA0000; i <= 0xBFFFF; i++)
