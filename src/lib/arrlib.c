@@ -47,3 +47,29 @@ bool_t contains_int32(int32_t arr[], uint32_t size, int32_t value)
             return true;
     return false;
 }
+
+void set_bitmap8_val(uint8_t bitmap[], size_t index, bool_t val)
+{
+    if (val)
+        bitmap[index / 8] |= (0x80 >> (index % 8));
+    else
+        bitmap[index / 8] &= ~(0x80 >> (index % 8));
+}
+
+bool_t get_bitmap8_val(uint8_t bitmap[], size_t index)
+{
+    return (bitmap[index / 8] >> (7 - index % 8)) & 0b1;
+}
+
+void set_bitmap64_val(uint64_t bitmap[], size_t index, bool_t val)
+{
+    if (val)
+        bitmap[index / 64] |= (0x8000000000000000 >> (index % 64));
+    else
+        bitmap[index / 64] &= ~(0x8000000000000000 >> (index % 64));
+}
+
+bool_t get_bitmap64_val(uint64_t bitmap[], size_t index)
+{
+    return (bitmap[index / 64] >> (63 - index % 64)) & 0b1;
+}

@@ -41,6 +41,9 @@
 
 #define VGA_CRTC_PROTECT_BIT 0x80
 
+#define VGA_03h_START 0xC1018000 // 0xB8000 - replaced by virtual address
+#define VGA_13h_START 0xC1000000 // 0xA0000 - replaced by virtual address
+
 static const uint8_t g_80x25_text[] =
     {
         /* MISC */
@@ -836,7 +839,7 @@ void write_font(const uint8_t font[256][FONT_HEIGHT])
     glyph_regs_backup_t backup = save_glyphs_write_regs();
     for (int i = 0; i < 256; i++)
         for (int j = 0; j < FONT_HEIGHT; j++)
-            pokeb(0xB800, i * 32 + j, font[i][j]); // Absolute magic. I`m totaly don`t give a f how it worked
+            *(volatile uint8_t *)(VGA_03h_START + (i * 32 + j)) = font[i][j];
     restore_glyphs_write_regs(backup);
 }
 
@@ -846,7 +849,7 @@ void write_glyphs(uint8_t glyphs_count, const uint8_t glyphs[glyphs_count][FONT_
 
     for (int i = 0; i < glyphs_count; i++)
         for (int j = 0; j < FONT_HEIGHT; j++)
-            pokeb(0xB800, glyph_codes[i] * 32 + j, glyphs[i][j]);
+            *(volatile uint8_t *)(VGA_03h_START + (glyph_codes[i] * 32 + j)) = glyphs[i][j];
     restore_glyphs_write_regs(backup);
 }
 
@@ -854,7 +857,7 @@ void write_glyph(const uint8_t glyph[FONT_HEIGHT], uint8_t glyph_code)
 {
     glyph_regs_backup_t backup = save_glyphs_write_regs();
     for (int j = 0; j < FONT_HEIGHT; j++)
-        pokeb(0xB800, glyph_code * 32 + j, glyph[j]); // Absolute magic. I`m totaly don`t give a f how it worked
+        *(volatile uint8_t *)(VGA_03h_START + (glyph_code * 32 + j)) = glyph[j];
     restore_glyphs_write_regs(backup);
 }
 
@@ -1003,7 +1006,7 @@ static void write_pixel8x(uint32_t x, uint32_t y, uint8_t c)
 
 void draw_mode13h_test_pattern(void)
 {
-    volatile uint8_t *vga = (volatile uint8_t *)0xA0000;
+    volatile uint8_t *vga = (volatile uint8_t *)VGA_13h_START;
     for (int y = 0; y < 200; y++)
         for (int x = 0; x < 320; x++)
             vga[y * 320 + x] = (uint8_t)((x + y) & 0xFF);
@@ -1015,7 +1018,7 @@ void set_text_mode(void)
     write_regs(g_80x25_text);
     write_palette(g_80x25_text_palette, sizeof(g_80x25_text_palette) / sizeof(g_80x25_text_palette[0]));
     write_font(g_8x16_font);
-
+    return;
     cols = 80;
     rows = 25;
     ht = 16;

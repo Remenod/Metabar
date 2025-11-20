@@ -4,12 +4,14 @@
 #include <lib/string.h>
 #include <lib/types.h>
 
-static volatile uint16_t *vga = (volatile uint16_t *)0xB8000;
+static volatile uint16_t *vga = (volatile uint16_t *)0xC1018000;
 static uint16_t cursor_pos = 0;
 char print_dec_buf[12];
 
 void put_char(uint16_t pos, unsigned char c)
 {
+    if (pos > 1999)
+        return;
     vga[pos] = (vga[pos] & 0b1111111100000000) | c;
 }
 

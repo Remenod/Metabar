@@ -5,6 +5,7 @@
 #include <timer/pit.h>
 #include <drivers/vga.h>
 #include <interrupts/cpu_exceptions.h>
+#include <paging/paging.h>
 #include <kernel/diagnostics/stack_guard/stack_guard.h>
 #include <kernel/diagnostics/warning_routine.h>
 #include <kernel/settings.h>
@@ -12,12 +13,19 @@
 
 void kernel_main()
 {
+    asm volatile("cli");
+
     const char done_text[] = "Done\n";
+
+    print("Kernel Page Dir Initialization... ");
+    setup_high_half_selfcontained_paging();
+    print(done_text);
+
     print("Setting Initialization... ");
     settings_init();
     print(done_text);
 
-    print("\nInstalling IDT... ");
+    print("Installing IDT... ");
     idt_install();
     print(done_text);
 
@@ -41,9 +49,9 @@ void kernel_main()
     init_kernel_warning_routine();
     print(done_text);
 
-    print("Installing Stack Guard... ");
-    stack_guard_install();
-    print(done_text);
+    // print("Installing Stack Guard... ");
+    // stack_guard_install();
+    // print(done_text);
 
     print("Testing VGA modes... ");
     set_graphics_mode();

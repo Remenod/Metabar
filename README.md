@@ -2,7 +2,7 @@
 
 A bare-metal educational operating system project for x86, originally created to implement the classic **Snake** game in protected mode without any external dependencies. The project boots from the **MBR** via BIOS and runs directly on the hardware (or QEMU).  
 
-Over time it has grown into a small experimental OS with exception handling, keyboard input, VGA text/graphics modes, custom fonts, palette control, a stack guard mechanism, and multiple demo applications.
+Over time it has grown into a small experimental OS with exception handling, keyboard input, VGA text/graphics modes, custom fonts, palette control, paging, and multiple demo applications.
 
 ---
 
@@ -19,9 +19,7 @@ Over time it has grown into a small experimental OS with exception handling, key
   - VGA driver with support for text mode `0x03` and graphics mode `0x13`.
   - DAC palette setup and custom font loading.
   - Global settings system
-  - Expand-down stack segment with **Stack Guard**:
-    - Warns at 75% stack usage.
-    - Triggers a custom **Stack Overflow Interrupt** at 100%.
+  - High-half kernel mapping
   - **Red Screen of Death (RSoD)** kernel panic screen.
 - No dependency on `libc` or any external libraries.
 - Fully freestanding kernel (written in C, C++ and assembly).
@@ -45,14 +43,42 @@ Over time it has grown into a small experimental OS with exception handling, key
 ## Repository Structure
 
 ```
-boot/         - Bootloader (boot.asm, MBR)
-include/      - Public headers (arch, drivers, kernel, lib)
-src/          - Kernel, architecture-specific code, drivers, applications
-  apps/       - Demo programs (Snake, Sandbox, Roulette, etc.)
-  arch/x86/   - Interrupt handling, ports, PIC, PIT
-  kernel/     - Core kernel and drivers
-  lib/        - Custom C standard library replacement
-Makefile      - Build system
+boot/                     - Early boot code (MBR)
+
+include/                  - Public kernel headers
+  arch/x86/               - x86-specific headers
+    interrupts/           - IDT, ISR, PIC
+    paging/               - Paging, bootstrap paging, GDT
+    timer/                - PIT timer
+    ports.h               - I/O port access
+  drivers/                - Keyboard, mouse, screen, VGA, serial
+  kernel/                 - Diagnostics, memory, settings
+  lib/                    - Custom C library headers
+
+src/                      - Kernel sources
+  apps/                   - User-facing demo applications
+    app_selector/         - Application switcher
+    mouse_playground/     - Mouse interaction demo
+    rsod_roulette/        - RSOD roulette easter egg
+    segment_test/         - Segment register test
+    settings_manager/     - Kernel settings app
+    snake/                - Snake game
+    text_sandbox/         - Text demo sandbox
+  arch/x86/               - Architecture-specific implementation
+    diagnostics/          - RSOD and warning routines
+    interrupts/           - IDT, ISR, PIC, CPU exception handlers
+    paging/               - Paging system, bootstrap paging
+    timer/                - PIT implementation
+    ports.c               - port I/O
+  kernel/                 - Core kernel logic and entry point
+    core/                 - Kernel bootstrap and memory init
+    drivers/              - Driver implementations
+    kernel_entry.asm      - Kernel entry point
+    linker.ld             - Linker script
+  lib/                    - Custom libc-like implementation (string, mem, math, etc.)
+
+Makefile                  - Build rules
+
 ```
 
 ---
@@ -126,7 +152,7 @@ sudo apt install nasm qemu-system-i386
 make
 ```
 
-This produces `build/snake.img`, a bootable raw image.
+This produces `build/metabar.img`, a bootable raw image.
 
 ### Run in QEMU
 ```bash
@@ -142,9 +168,9 @@ make clean
 
 ## Running on Real Hardware
 
-1. Write `build/snake.img` to the beginning of a storage device (e.g. USB stick) since the bootloader is in the MBR:
+1. Write `build/metabar.img` to the beginning of a storage device (e.g. USB stick) since the bootloader is in the MBR:
    ```bash
-   sudo dd if=build/snake.img of=/dev/sdX bs=512
+   sudo dd if=build/metabar.img of=/dev/sdX bs=512
    ```
 2. Boot from it using BIOS (legacy boot).
 3. A **PS/2 keyboard** is required. If using USB, make sure **USB-PS/2 emulation** is enabled in BIOS/UEFI.
@@ -182,10 +208,15 @@ make clean
 ## Future Plans
 
 - Dynamic memory allocation.
-- Paging support.
 - Additional demo applications (possibly **Tetris**).
 - Snake AI mode using pre-trained weights.
 - Further expansion of VGA graphics features.
+- USB driver
+- Hard drive driver
+- File System driver
+- ELF executor
+- Paging based Stack Guard
+- User mode (CPL3)
 
 ---
 
@@ -200,10 +231,3 @@ External sources:
   License: Public domain.  
 
 Many theoretical references were taken from [OSDev Wiki](https://wiki.osdev.org).
-
----
-
-## Disclaimer
-
-This project is experimental and intended as a learning resource.  
-It runs in **ring 0 only** (CPL0), with no user mode (CPL3).  

@@ -41,6 +41,18 @@ void serial_write_hex_byte(unsigned char byte)
     serial_write_char(hex_digits[byte & 0xF]);
 }
 
+void serial_write_hex_uint32(uint32_t value)
+{
+    for (int i = 7; i >= 0; i--)
+    {
+        int index = (value >> (i * 4)) & 0xF;
+        if (index < 10)
+            serial_write_uint32(index);
+        else
+            serial_write_char(index + (65 - 10));
+    }
+}
+
 void serial_write_dump_hex(const unsigned char *dump, int length)
 {
     for (int i = 0; i < length; i++)

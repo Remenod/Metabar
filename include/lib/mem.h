@@ -4,6 +4,8 @@
 
 void *memcpy(void *dest, const void *src, uint32_t n);
 
+void memmove(void *dst, const void *src, size_t size);
+
 void *memset(void *dst, int value, unsigned count);
 
 void pokeb(unsigned seg, unsigned off, uint8_t val);

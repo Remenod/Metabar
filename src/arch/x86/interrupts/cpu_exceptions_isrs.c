@@ -10,7 +10,7 @@
 
 // add implemented isr vec here
 #define ISR_TO_REGISTRATION X(0) X(1) X(2) X(3) X(4) X(5) X(6) X(7) X(8) X(9) \
-    X(11) X(12) X(13) X(16) X(17) X(18) X(19) X(48)
+    X(11) X(12) X(13) X(14) X(16) X(17) X(18) X(19) X(48)
 
 DEFINE_UNSPECIAL_ISR(0, "Division by Zero");
 DEFINE_UNSPECIAL_ISR(2, "NMI - Hardware Critical")
@@ -23,7 +23,7 @@ DEFINE_UNSPECIAL_ISR(9, "Coprocessor Segment Overrun");
 DEFINE_UNSPECIAL_ISR(11, "Segment Not Present");
 DEFINE_UNSPECIAL_ISR(12, "Stack Segment Fault"); // TODO reimplement after Rings system will be implemented(also special common isr needed)
 DEFINE_UNSPECIAL_ISR(13, "General Protection Fault");
-/* 14 Page Fault */ // TODO implement after paging will be implemented
+DEFINE_UNSPECIAL_ISR(14, "Page Fault");
 DEFINE_UNSPECIAL_ISR(16, "FPU Floating-Point Error");
 DEFINE_UNSPECIAL_ISR(17, "Unaligned data operation");
 DEFINE_UNSPECIAL_ISR(18, "Machine Check - CPU Hardware Failure");

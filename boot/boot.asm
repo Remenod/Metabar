@@ -172,7 +172,7 @@ init_pm:
   jmp $
 
 ; ===== STRINGS =====
-msg_loading_kernel db "Loading kernel...", 0
+msg_loading_kernel db "Loading kernel... ", 0
 msg_kernel_loaded  db "Kernel loaded!", 0
 msg_disk_error     db "Disk read error", 0
 
