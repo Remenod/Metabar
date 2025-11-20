@@ -14,6 +14,10 @@ typedef short int16_t;
 typedef int int32_t;
 typedef long long int64_t;
 
+typedef long long intmax_t;
+typedef unsigned long long uintmax_t;
+
+
 // bool
 typedef uint8_t bool_t;
 #define true 1
@@ -23,3 +27,5 @@ typedef uint8_t bool_t;
 #define NULL ((void *)0)
 typedef unsigned long size_t;
 typedef void (*func_t)();
+
+typedef long long ptrdiff_t;
