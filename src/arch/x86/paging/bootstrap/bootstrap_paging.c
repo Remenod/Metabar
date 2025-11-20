@@ -9,10 +9,10 @@ __attribute__((section(".bootstrap"))) extern void bootstrap_load_page_directory
 __attribute__((section(".bootstrap"))) extern void bootstrap_enable_global_pages(void);
 __attribute__((section(".bootstrap"))) extern void bootstrap_enable_paging(void);
 
-__attribute__((section(".bootstrap_rodata"), aligned(4096))) pde_t bootstrap_page_directory[1024] = {0};
-__attribute__((section(".bootstrap_rodata"), aligned(4096))) pte_t bootstrap_page_table[1024] = {0};
-__attribute__((section(".bootstrap_rodata"), aligned(4096))) pte_t bootstrap_page_table_kernel[1024] = {0};
-__attribute__((section(".bootstrap_rodata"), aligned(4096))) pte_t bootstrap_page_table_vga_vram[1024] = {0};
+__attribute__((section(".bootstrap.data"), aligned(4096))) pde_t bootstrap_page_directory[1024] = {0};
+__attribute__((section(".bootstrap.data"), aligned(4096))) pte_t bootstrap_page_table[1024] = {0};
+__attribute__((section(".bootstrap.data"), aligned(4096))) pte_t bootstrap_page_table_kernel[1024] = {0};
+__attribute__((section(".bootstrap.data"), aligned(4096))) pte_t bootstrap_page_table_vga_vram[1024] = {0};
 
 extern uint8_t __phys_after_bootstrap_data; // from linker script
 

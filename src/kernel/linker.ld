@@ -11,10 +11,10 @@ SECTIONS
     }
     __phys_after_bootstrap = ALIGN(. , 0x1000);
 
-    .bootstrap_rodata : AT(ADDR(.bootstrap) + SIZEOF(.bootstrap))
+    .bootstrap.data : AT(ADDR(.bootstrap) + SIZEOF(.bootstrap))
     {
-        KEEP(*(.bootstrap_rodata))
-        KEEP(*(.bootstrap_rodata.*))
+        KEEP(*(.bootstrap.data))
+        KEEP(*(.bootstrap.data.*))
     }
     __phys_after_bootstrap_data = ALIGN(. , 0x1000);
 
