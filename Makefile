@@ -20,7 +20,7 @@ BOOT_BIN := $(BUILD_DIR)/boot.bin
 ENTRY_OBJ := $(BUILD_DIR)/kernel/kernel_entry.o
 KERNEL_ELF := $(BUILD_DIR)/kernel.elf
 KERNEL_BIN := $(BUILD_DIR)/kernel.bin
-IMAGE := $(BUILD_DIR)/snake.img
+IMAGE := $(BUILD_DIR)/metabar.img
 
 C_SRCS := $(shell find $(SRC_DIR) -name "*.c")
 CPP_SRCS := $(shell find $(SRC_DIR) -name "*.cpp")
