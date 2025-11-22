@@ -3,7 +3,7 @@
 #include <lib/types.h>
 
 #define HEAP_START 0xD0000000
-#define HEAP_END 0xD1000000
+#define HEAP_END 0xE0000000
 
 typedef struct block block_t;
 
