@@ -9,6 +9,7 @@
 #include <kernel/diagnostics/stack_guard/stack_guard.h>
 #include <kernel/diagnostics/warning_routine.h>
 #include <kernel/settings.h>
+#include <kernel/memory.h>
 #include "../../apps/app_selector/app_selector.h"
 
 void kernel_main()
@@ -35,6 +36,10 @@ void kernel_main()
 
     print("CPU int registration... ");
     register_all_cpu_exceptions_isrs();
+    print(done_text);
+
+    print("Heap Initialization... ");
+    heap_init();
     print(done_text);
 
     print("Installing mouse... ");

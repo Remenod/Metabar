@@ -54,5 +54,4 @@ void idt_install()
 #undef X
 
     lidt(&idtp);
-    asm volatile("sti");
 }

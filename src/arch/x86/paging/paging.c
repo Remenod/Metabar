@@ -8,6 +8,28 @@
 #include <drivers/qemu_serial.h>
 
 static uint8_t avl_phys_pages_bitmap[TOTAL_FRAMES / 8] = {0};
+static uint32_t last_avl_frame_index = 0;
+
+static void set_alv_frame(uint32_t index, bool_t val)
+{
+    if (!val)
+    {
+        if (index < last_avl_frame_index)
+            last_avl_frame_index = index;
+    }
+    set_bitmap8_val(avl_phys_pages_bitmap, index, val);
+}
+static bool_t get_alv_frame(uint32_t index)
+{
+    bool_t val = get_bitmap8_val(avl_phys_pages_bitmap, index);
+    if (!val)
+    {
+        if (index < last_avl_frame_index)
+            last_avl_frame_index = index;
+    }
+
+    return val;
+}
 
 static gdt_entry_t kernel_gdt[6] = {0};
 static gdt_ptr_t gp;
@@ -44,21 +66,81 @@ static inline void invlpg(void *addr)
 // returns PHYSICAL addres of avaible frame
 uint32_t alloc_frame(void)
 {
-    for (uint32_t i = 0; i < TOTAL_FRAMES; ++i)
+    for (uint32_t i = last_avl_frame_index; i < TOTAL_FRAMES; ++i)
     {
-        if (!get_bitmap8_val(avl_phys_pages_bitmap, i))
+        if (!get_alv_frame(i))
         {
-            set_bitmap8_val(avl_phys_pages_bitmap, i, true);
+            set_alv_frame(i, true);
             return i * PAGE_SIZE;
         }
     }
     return 0;
 }
 
+/*
+ * Quick search for N contiguous frames.
+ * Returns the physical address of the first frame (phys = start_frame * PAGE_SIZE),
+ * or 0 if not found.
+ */
+uint32_t alloc_contiguous_frames(uint32_t pages)
+{
+    if (pages == 0 || pages > TOTAL_FRAMES)
+    {
+        serial_write_uint32(pages);
+        serial_write_str("\nalloc_contiguous_frames validation catch\n");
+        return 0;
+    }
+
+    uint32_t run = 0;
+    uint32_t start = 0;
+
+    for (uint32_t i = last_avl_frame_index; i < TOTAL_FRAMES; ++i)
+    {
+        if (!get_alv_frame(i))
+        {
+            if (run == 0)
+                start = i;
+            ++run;
+            if (run >= pages)
+            {
+                for (uint32_t j = start; j < start + pages; ++j)
+                    set_alv_frame(j, true);
+                return start * PAGE_SIZE;
+            }
+        }
+        else
+        {
+            run = 0;
+        }
+    }
+
+    for (uint32_t i = 0; i < last_avl_frame_index; ++i)
+    {
+        if (!get_alv_frame(i))
+        {
+            if (run == 0)
+                start = i;
+            ++run;
+            if (run >= pages)
+            {
+                for (uint32_t j = start; j < start + pages; ++j)
+                    set_alv_frame(j, true);
+                return start * PAGE_SIZE;
+            }
+        }
+        else
+        {
+            run = 0;
+        }
+    }
+
+    return 0;
+}
+
 // set page that phys addr came from as avaible
 void free_frame(uint32_t phys_addr)
 {
-    set_bitmap8_val(avl_phys_pages_bitmap, phys_addr / PAGE_SIZE, false);
+    set_alv_frame(phys_addr / PAGE_SIZE, false);
 }
 
 // returns PHYSICAL addres of avaible frame
@@ -137,6 +219,59 @@ void map_page(uint32_t virt, uint32_t phys, uint32_t flags)
     pte->fields.us = (flags & 4) != 0;
 
     asm volatile("invlpg (%0)" ::"r"(virt));
+}
+
+/* * Batch mapping: map_range(virt_start, phys_start, pages, flags)
+ * - Does NOT call invlpg for each page
+ * - Allocates the page table only once per PD index
+ * - Calls flush_tlb() once at the end */
+void map_range(uint32_t virt_start, uint32_t phys_start, uint32_t pages, uint32_t flags)
+{
+    if (pages == 0)
+        return;
+
+    uint32_t virt = virt_start;
+    uint32_t phys = phys_start;
+
+    uint32_t pages_left = pages;
+    while (pages_left > 0)
+    {
+        uint32_t pd_index = virt >> 22;
+        uint32_t pt_index = (virt >> 12) & 0x3FF;
+
+        uint32_t chunk = 1024 - pt_index;
+        if (chunk > pages_left)
+            chunk = pages_left;
+
+        volatile pde_t *pde = get_pd_virt() + pd_index;
+        if (!pde->fields.present)
+        {
+            uint32_t pt_phys = alloc_page_table_phys();
+            if (!pt_phys)
+            {
+                flush_tlb();
+                return;
+            }
+            alloc_page_table_virtual(pd_index, pt_phys);
+        }
+
+        volatile pte_t *pt = get_pt_virt(pd_index);
+
+        for (uint32_t i = 0; i < chunk; ++i)
+        {
+            uint32_t idx = pt_index + i;
+            pt[idx].fields.addr = (phys >> 12);
+            pt[idx].fields.present = 1;
+            pt[idx].fields.rw = (flags & 2) != 0;
+            pt[idx].fields.us = (flags & 4) != 0;
+
+            phys += PAGE_SIZE;
+            virt += PAGE_SIZE;
+            --pages_left;
+        }
+    }
+
+    flush_tlb();
 }
 
 // unmaps given VIRTUAL page if it is present in page table
@@ -229,10 +364,10 @@ void setup_high_half_selfcontained_paging(void)
     init_kernel_gdt();
 
     for (uint32_t i = 0; i < KERNEL_PHYS_END / PAGE_SIZE; i++)
-        set_bitmap8_val(avl_phys_pages_bitmap, i, true);
+        set_alv_frame(i, true);
 
     for (int i = 0xA0000; i <= 0xBFFFF; i++)
-        set_bitmap8_val(avl_phys_pages_bitmap, i / PAGE_SIZE, true);
+        set_alv_frame(i / PAGE_SIZE, true);
 
     uint32_t kernel_pd_phys = alloc_page_directory_phys();
     if (!kernel_pd_phys)
