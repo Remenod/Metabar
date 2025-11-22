@@ -34,7 +34,7 @@ void serial_write_str(const char *s)
         serial_write_char(*s++);
 }
 
-void serial_write_hex_byte(unsigned char byte)
+void serial_write_hex_uint8(unsigned char byte)
 {
     const char hex_digits[] = "0123456789ABCDEF";
     serial_write_char(hex_digits[(byte >> 4) & 0xF]);
@@ -53,13 +53,25 @@ void serial_write_hex_uint32(uint32_t value)
     }
 }
 
-void serial_write_dump_hex(const unsigned char *dump, int length)
+void serial_write_dump_hex_uint8(const unsigned char *dump, int length)
 {
     for (int i = 0; i < length; i++)
     {
         serial_write_char('0');
         serial_write_char('x');
-        serial_write_hex_byte(dump[i]);
+        serial_write_hex_uint8(dump[i]);
+        serial_write_char(',');
+        serial_write_char(' ');
+    }
+}
+
+void serial_write_dump_hex_uint32(const unsigned char *dump, int length)
+{
+    for (int i = 0; i < length; i++)
+    {
+        serial_write_char('0');
+        serial_write_char('x');
+        serial_write_hex_uint32(dump[i]);
         serial_write_char(',');
         serial_write_char(' ');
     }
@@ -156,7 +168,7 @@ void serial_send_font(uint8_t font[256][16])
         for (int j = 0; j < 16; j++)
         {
 
-            serial_write_hex_byte(font[i][j]);
+            serial_write_hex_uint8(font[i][j]);
             if (j < 16 - 1)
                 serial_write_char(' ');
         }

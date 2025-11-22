@@ -10,11 +10,13 @@ void serial_write_char(char c);
 
 void serial_write_str(const char *s);
 
-void serial_write_hex_byte(unsigned char byte);
+void serial_write_hex_uint8(unsigned char byte);
 
 void serial_write_hex_uint32(uint32_t value);
 
-void serial_write_dump_hex(const unsigned char *dump, int length);
+void serial_write_dump_hex_uint8(const unsigned char *dump, int length);
+
+void serial_write_dump_hex_uint32(const unsigned char *dump, int length);
 
 void serial_write_uint8(uint8_t value);
 
