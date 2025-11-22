@@ -491,3 +491,114 @@ void serial_send_font(uint8_t font[256][16])
         serial_write_str("\r\n");
     }
 }
+#if 0
+void test_serial()
+{
+    // --- Цілі числа ---
+    uint8_t u8 = 42;
+    uint16_t u16 = 65535;
+    uint32_t u32 = 0xDEADBEEF;
+    uint64_t u64 = 0x123456789ABCDEF0ULL;
+
+    int8_t i8 = -42;
+    int16_t i16 = -32768;
+    int32_t i32 = -123456789;
+    int64_t i64 = -0x123456789ABCDEF0LL;
+
+    // --- Hex ---
+    serial_write_hex_uint8(u8);
+    serial_write_char('\n');
+    serial_write_hex_uint16(u16);
+    serial_write_char('\n');
+    serial_write_hex_uint32(u32);
+    serial_write_char('\n');
+    serial_write_hex_uint64(u64);
+    serial_write_char('\n');
+
+    // --- Binary ---
+    serial_write_bin_uint8(u8);
+    serial_write_char('\n');
+    serial_write_bin_uint16(u16);
+    serial_write_char('\n');
+    serial_write_bin_uint32(u32);
+    serial_write_char('\n');
+    serial_write_bin_uint64(u64);
+    serial_write_char('\n');
+
+    serial_write_bin_int8(i8);
+    serial_write_char('\n');
+    serial_write_bin_int16(i16);
+    serial_write_char('\n');
+    serial_write_bin_int32(i32);
+    serial_write_char('\n');
+    serial_write_bin_int64(i64);
+    serial_write_char('\n');
+
+    // --- Decimal ---
+    serial_write_uint(u64);
+    serial_write_char('\n');
+    serial_write_int(i64);
+    serial_write_char('\n');
+
+    // --- Dumps ---
+    uint8_t arr8[4] = {1, 2, 3, 255};
+    uint16_t arr16[4] = {1000, 2000, 3000, 65535};
+    uint32_t arr32[4] = {0x12345678, 0xDEADBEEF, 0, 0xFFFFFFFF};
+    uint64_t arr64[4] = {1, 2, 3, 0xFFFFFFFFFFFFFFFFULL};
+
+    int8_t iarr8[4] = {-1, -2, 0, 127};
+    int16_t iarr16[4] = {-1000, 0, 1000, 32767};
+    int32_t iarr32[4] = {-123456, 0, 123456, 2147483647};
+    int64_t iarr64[4] = {-1, 0, 1, 9223372036854775807LL};
+
+    serial_write_dump_hex_uint8(arr8, 4);
+    serial_write_char('\n');
+    serial_write_dump_hex_uint16(arr16, 4);
+    serial_write_char('\n');
+    serial_write_dump_hex_uint32(arr32, 4);
+    serial_write_char('\n');
+    serial_write_dump_hex_uint64(arr64, 4);
+    serial_write_char('\n');
+
+    serial_write_dump_uint8(arr8, 4);
+    serial_write_char('\n');
+    serial_write_dump_uint16(arr16, 4);
+    serial_write_char('\n');
+    serial_write_dump_uint32(arr32, 4);
+    serial_write_char('\n');
+    serial_write_dump_uint64(arr64, 4);
+    serial_write_char('\n');
+
+    serial_write_dump_int8(iarr8, 4);
+    serial_write_char('\n');
+    serial_write_dump_int16(iarr16, 4);
+    serial_write_char('\n');
+    serial_write_dump_int32(iarr32, 4);
+    serial_write_char('\n');
+    serial_write_dump_int64(iarr64, 4);
+    serial_write_char('\n');
+
+    serial_write_dump_bin(arr8, 4, 8);
+    serial_write_char('\n');
+    serial_write_dump_bin(arr16, 4, 16);
+    serial_write_char('\n');
+    serial_write_dump_bin(arr32, 4, 32);
+    serial_write_char('\n');
+    serial_write_dump_bin(arr64, 4, 64);
+    serial_write_char('\n');
+
+    // --- Float / Double ---
+    float farr[4] = {0.0f, -1.5f, 3.14159f, 123.456f};
+    double darr[4] = {0.0, -1.5, 3.1415926535, 123456.789};
+
+    serial_write_float(farr[0]);
+    serial_write_char('\n');
+    serial_write_double(darr[0]);
+    serial_write_char('\n');
+
+    serial_write_dump_float(farr, 4);
+    serial_write_char('\n');
+    serial_write_dump_double(darr, 4);
+    serial_write_char('\n');
+}
+#endif
