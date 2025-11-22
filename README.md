@@ -20,6 +20,7 @@ Over time it has grown into a small experimental OS with exception handling, key
   - DAC palette setup and custom font loading.
   - Global settings system
   - High-half kernel mapping
+  - Heap with `malloc`
   - **Red Screen of Death (RSoD)** kernel panic screen.
 - No dependency on `libc` or any external libraries.
 - Fully freestanding kernel (written in C, C++ and assembly).
@@ -207,7 +208,6 @@ make clean
 
 ## Future Plans
 
-- Dynamic memory allocation.
 - Additional demo applications (possibly **Tetris**).
 - Snake AI mode using pre-trained weights.
 - Further expansion of VGA graphics features.
