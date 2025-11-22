@@ -372,6 +372,86 @@ void serial_write_dump_int64(const int64_t *dump, size_t count)
     serial_write_dump_bin(dump, count, 64);
 }
 
+/*===============REAL================*/
+
+// writes float number in qemu console
+void serial_write_float(float value)
+{
+    char buf[32];
+    int len = 0;
+
+    if (value < 0)
+    {
+        serial_write_char('-');
+        value = -value;
+    }
+
+    int int_part = (int)value;
+    float frac_part = value - int_part;
+
+    serial_write_uint(int_part);
+    serial_write_char('.');
+
+    for (int i = 0; i < 6; i++)
+    {
+        frac_part *= 10.0f;
+        int digit = (int)frac_part;
+        serial_write_char('0' + digit);
+        frac_part -= digit;
+    }
+}
+
+// writes double number in qemu console
+void serial_write_double(double value)
+{
+    char buf[32];
+    int len = 0;
+
+    if (value < 0)
+    {
+        serial_write_char('-');
+        value = -value;
+    }
+
+    int64_t int_part = (int64_t)value;
+    double frac_part = value - (double)int_part;
+
+    serial_write_uint(int_part);
+    serial_write_char('.');
+
+    for (int i = 0; i < 12; i++)
+    {
+        frac_part *= 10.0;
+        int digit = (int)frac_part;
+        serial_write_char('0' + digit);
+        frac_part -= digit;
+    }
+}
+
+/* REAL DUMP=========== */
+
+// writes float number array dump in qemu console
+void serial_write_dump_float(const float *arr, size_t count)
+{
+    for (size_t i = 0; i < count; i++)
+    {
+        serial_write_float(arr[i]);
+        serial_write_char(',');
+        serial_write_char(' ');
+    }
+}
+
+// writes double number array dump in qemu console
+void serial_write_dump_double(const double *arr, size_t count)
+{
+    for (size_t i = 0; i < count; i++)
+    {
+        serial_write_double(arr[i]);
+        serial_write_char(',');
+        serial_write_char(' ');
+    }
+}
+
 /*===============OTHER===============*/
 
 // writes DAC rgb pallete in qemu console
