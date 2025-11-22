@@ -8,15 +8,10 @@ static block_t *heap_free_list = NULL;
 // resets the heap. Call this before first malloc
 void heap_init(void)
 {
-    for (uint32_t virt = HEAP_START; virt < HEAP_END; virt += 0x1000)
-    {
-        uint32_t ph = alloc_frame();
-        map_page(virt, ph, PAGE_PRESENT | PAGE_RW);
-        // serial_write_hex_uint32(virt);
-        // serial_write_str(" -> ");
-        // serial_write_hex_uint32(ph);
-        // serial_write_char('\n');
-    }
+    uint32_t phys = alloc_contiguous_frames((HEAP_END - HEAP_START) / PAGE_SIZE);
+    if (!phys)
+        return 0;
+    map_range(HEAP_START, phys, (HEAP_END - HEAP_START) / PAGE_SIZE, PAGE_RW | PAGE_PRESENT);
 
     heap_free_list = (block_t *)HEAP_START;
     heap_free_list->size = HEAP_END - HEAP_START - sizeof(block_t);
