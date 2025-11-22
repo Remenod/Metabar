@@ -85,11 +85,7 @@ uint32_t alloc_frame(void)
 uint32_t alloc_contiguous_frames(uint32_t pages)
 {
     if (pages == 0 || pages > TOTAL_FRAMES)
-    {
-        serial_write_uint32(pages);
-        serial_write_str("\nalloc_contiguous_frames validation catch\n");
         return 0;
-    }
 
     uint32_t run = 0;
     uint32_t start = 0;
