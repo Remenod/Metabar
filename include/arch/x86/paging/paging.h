@@ -12,7 +12,7 @@ extern uint8_t __phys_after_kernel;         // from linker script
 #define KERNEL_PHYS_END (uint32_t)&__phys_after_kernel
 #define PAGE_PRESENT 0x1
 #define PAGE_RW 0x2
-#define PAGE_SIZE 1024 * 4
+#define PAGE_SIZE 0x1000
 #define TOTAL_FRAMES 1024 * 1024
 
 #define HIGH_HALF_STACK_CAPACITY 0x3FFFC
@@ -39,9 +39,13 @@ inline void *vir_to_phys_addr(void *virt)
 
 void map_page(uint32_t virt, uint32_t phys, uint32_t flags);
 
+void map_range(uint32_t virt_start, uint32_t phys_start, uint32_t pages, uint32_t flags);
+
 void unmap_page(uint32_t virt);
 
 uint32_t alloc_frame(void);
+
+uint32_t alloc_contiguous_frames(uint32_t pages);
 
 void free_frame(uint32_t phys_addr);
 
