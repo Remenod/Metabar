@@ -5,6 +5,8 @@
 
 #define COM1_PORT 0x3F8
 
+static const char hex_digits[] = "0123456789ABCDEF";
+
 void serial_init()
 {
     outb(COM1_PORT + 1, 0x00); // Disable all interrupts
@@ -21,6 +23,7 @@ int serial_is_transmit_empty()
     return inb(COM1_PORT + 5) & 0x20;
 }
 
+// writes single char in qemu console
 void serial_write_char(char c)
 {
     while (!serial_is_transmit_empty())
@@ -28,54 +31,93 @@ void serial_write_char(char c)
     outb(COM1_PORT, c);
 }
 
+// writes string in qemu console
 void serial_write_str(const char *s)
 {
     while (*s)
         serial_write_char(*s++);
 }
 
-void serial_write_hex_uint8(unsigned char byte)
+/*================HEX================*/
+
+static inline void serial_write_hex(uint64_t value, uint8_t bits)
 {
-    const char hex_digits[] = "0123456789ABCDEF";
-    serial_write_char(hex_digits[(byte >> 4) & 0xF]);
-    serial_write_char(hex_digits[byte & 0xF]);
+    uint8_t nibbles = bits / 4;
+
+    for (int i = nibbles - 1; i >= 0; i--)
+        serial_write_char(hex_digits[(value >> (i * 4)) & 0xF]);
 }
 
+// writes unsigned hex 8bit number in qemu console
+void serial_write_hex_uint8(uint8_t value)
+{
+    serial_write_hex(value, 8);
+}
+
+// writes unsigned hex 16bit number in qemu console
+void serial_write_hex_uint16(uint16_t value)
+{
+    serial_write_hex(value, 16);
+}
+
+// writes unsigned hex 32bit number in qemu console
 void serial_write_hex_uint32(uint32_t value)
 {
-    for (int i = 7; i >= 0; i--)
-    {
-        int index = (value >> (i * 4)) & 0xF;
-        if (index < 10)
-            serial_write_uint(index);
-        else
-            serial_write_char(index + (65 - 10));
-    }
+    serial_write_hex(value, 32);
 }
 
-void serial_write_dump_hex_uint8(const unsigned char *dump, int length)
+// writes unsigned hex 64bit number in qemu console
+void serial_write_hex_uint64(uint64_t value)
 {
-    for (int i = 0; i < length; i++)
+    serial_write_hex(value, 64);
+}
+
+/* HEX DUMP============ */
+
+static inline void serial_write_dump_hex(const void *dump, size_t count, uint8_t bits)
+{
+    const uint8_t *ptr = dump;
+
+    for (size_t i = 0; i < count; i++)
     {
         serial_write_char('0');
         serial_write_char('x');
-        serial_write_hex_uint8(dump[i]);
+
+        uint64_t val = 0;
+        for (int b = 0; b < bits / 8; b++)
+            val |= ((uint64_t)ptr[i * (bits / 8) + b]) << (b * 8);
+
+        serial_write_hex(val, bits);
         serial_write_char(',');
         serial_write_char(' ');
     }
 }
 
-void serial_write_dump_hex_uint32(const unsigned char *dump, int length)
+// writes unsigned hex 8bit number array dump in qemu console
+void serial_write_dump_hex_uint8(const uint8_t *dump, size_t count)
 {
-    for (int i = 0; i < length; i++)
-    {
-        serial_write_char('0');
-        serial_write_char('x');
-        serial_write_hex_uint32(dump[i]);
-        serial_write_char(',');
-        serial_write_char(' ');
-    }
+    serial_write_dump_hex(dump, count, 8);
 }
+
+// writes unsigned hex 16bit number array dump in qemu console
+void serial_write_dump_hex_uint16(const uint16_t *dump, size_t count)
+{
+    serial_write_dump_hex(dump, count, 16);
+}
+
+// writes unsigned hex 32bit number array dump in qemu console
+void serial_write_dump_hex_uint32(const uint32_t *dump, size_t count)
+{
+    serial_write_dump_hex(dump, count, 32);
+}
+
+// writes unsigned hex 64bit number array dump in qemu console
+void serial_write_dump_hex_uint64(const uint64_t *dump, size_t count)
+{
+    serial_write_dump_hex(dump, count, 64);
+}
+
+/*================DEC================*/
 
 // writes unsigned number in qemu console
 void serial_write_uint(uint64_t value)
@@ -135,6 +177,7 @@ void serial_send_palette(uint8_t palette[256][3])
     }
 }
 
+// writes VGA 03h mode font in qemu console
 void serial_send_font(uint8_t font[256][16])
 {
     char print_dec_buf[12];
