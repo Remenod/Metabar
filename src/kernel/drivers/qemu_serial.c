@@ -159,6 +159,96 @@ void serial_write_int(int64_t value)
     serial_write_uint(u);
 }
 
+/* DEC DUMP============ */
+
+static inline void serial_write_dump_uint(const void *dump, size_t count, uint8_t bits)
+{
+    const uint8_t *ptr = dump;
+    size_t step = bits / 8;
+
+    for (size_t i = 0; i < count; i++)
+    {
+        uint64_t val = 0;
+
+        for (size_t b = 0; b < step; b++)
+            val |= ((uint64_t)ptr[i * step + b]) << (b * 8);
+
+        serial_write_uint(val);
+        serial_write_char(',');
+        serial_write_char(' ');
+    }
+}
+
+// writes unsigned decimal 8bit number array dump in qemu console
+void serial_write_dump_uint8(const uint8_t *dump, size_t count)
+{
+    serial_write_dump_uint_impl(dump, count, 8);
+}
+
+// writes unsigned decimal 16bit number array dump in qemu console
+void serial_write_dump_uint16(const uint16_t *dump, size_t count)
+{
+    serial_write_dump_uint_impl(dump, count, 16);
+}
+
+// writes unsigned decimal 32bit number array dump in qemu console
+void serial_write_dump_uint32(const uint32_t *dump, size_t count)
+{
+    serial_write_dump_uint_impl(dump, count, 32);
+}
+
+// writes unsigned decimal 64bit number array dump in qemu console
+void serial_write_dump_uint64(const uint64_t *dump, size_t count)
+{
+    serial_write_dump_uint_impl(dump, count, 64);
+}
+
+static inline void serial_write_dump_int(const void *dump, size_t count, uint8_t bits)
+{
+    const uint8_t *ptr = dump;
+    size_t step = bits / 8;
+
+    for (size_t i = 0; i < count; i++)
+    {
+        int64_t val = 0;
+
+        for (size_t b = 0; b < step; b++)
+            val |= ((int64_t)ptr[i * step + b]) << (b * 8);
+
+        int64_t sign_mask = (int64_t)1 << (bits - 1);
+        if (val & sign_mask)
+            val |= (~0ULL << bits);
+
+        serial_write_int(val);
+        serial_write_char(',');
+        serial_write_char(' ');
+    }
+}
+
+// writes signed decimal 8bit number array dump in qemu console
+void serial_write_dump_int8(const int8_t *dump, size_t count)
+{
+    serial_write_dump_int_impl(dump, count, 8);
+}
+
+// writes signed decimal 16bit number array dump in qemu console
+void serial_write_dump_int16(const int16_t *dump, size_t count)
+{
+    serial_write_dump_int_impl(dump, count, 16);
+}
+
+// writes signed decimal 32bit number array dump in qemu console
+void serial_write_dump_int32(const int32_t *dump, size_t count)
+{
+    serial_write_dump_int_impl(dump, count, 32);
+}
+
+// writes signed decimal 64bit number array dump in qemu console
+void serial_write_dump_int64(const int64_t *dump, size_t count)
+{
+    serial_write_dump_int_impl(dump, count, 64);
+}
+
 void serial_send_palette(uint8_t palette[256][3])
 {
     for (int i = 0; i < 256; i++)
