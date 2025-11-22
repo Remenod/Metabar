@@ -8,6 +8,28 @@
 #include <drivers/qemu_serial.h>
 
 static uint8_t avl_phys_pages_bitmap[TOTAL_FRAMES / 8] = {0};
+static uint32_t last_avl_frame_index = 0;
+
+static void set_alv_frame(uint32_t index, bool_t val)
+{
+    if (!val)
+    {
+        if (index < last_avl_frame_index)
+            last_avl_frame_index = index;
+    }
+    set_bitmap8_val(avl_phys_pages_bitmap, index, val);
+}
+static bool_t get_alv_frame(uint32_t index)
+{
+    bool_t val = get_bitmap8_val(avl_phys_pages_bitmap, index);
+    if (!val)
+    {
+        if (index < last_avl_frame_index)
+            last_avl_frame_index = index;
+    }
+
+    return val;
+}
 
 static gdt_entry_t kernel_gdt[6] = {0};
 static gdt_ptr_t gp;
@@ -44,11 +66,11 @@ static inline void invlpg(void *addr)
 // returns PHYSICAL addres of avaible frame
 uint32_t alloc_frame(void)
 {
-    for (uint32_t i = 0; i < TOTAL_FRAMES; ++i)
+    for (uint32_t i = last_avl_frame_index; i < TOTAL_FRAMES; ++i)
     {
-        if (!get_bitmap8_val(avl_phys_pages_bitmap, i))
+        if (!get_alv_frame(i))
         {
-            set_bitmap8_val(avl_phys_pages_bitmap, i, true);
+            set_alv_frame(i, true);
             return i * PAGE_SIZE;
         }
     }
@@ -58,7 +80,7 @@ uint32_t alloc_frame(void)
 // set page that phys addr came from as avaible
 void free_frame(uint32_t phys_addr)
 {
-    set_bitmap8_val(avl_phys_pages_bitmap, phys_addr / PAGE_SIZE, false);
+    set_alv_frame(phys_addr / PAGE_SIZE, false);
 }
 
 // returns PHYSICAL addres of avaible frame
@@ -229,10 +251,10 @@ void setup_high_half_selfcontained_paging(void)
     init_kernel_gdt();
 
     for (uint32_t i = 0; i < KERNEL_PHYS_END / PAGE_SIZE; i++)
-        set_bitmap8_val(avl_phys_pages_bitmap, i, true);
+        set_alv_frame(i, true);
 
     for (int i = 0xA0000; i <= 0xBFFFF; i++)
-        set_bitmap8_val(avl_phys_pages_bitmap, i / PAGE_SIZE, true);
+        set_alv_frame(i / PAGE_SIZE, true);
 
     uint32_t kernel_pd_phys = alloc_page_directory_phys();
     if (!kernel_pd_phys)
