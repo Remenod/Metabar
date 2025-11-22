@@ -70,13 +70,39 @@ void free(void *ptr)
 {
     if (!ptr)
         return;
-    if ((uint32_t)ptr > HEAP_END || (uint32_t)ptr < HEAP_START)
+
+    if ((uint32_t)ptr < HEAP_START || (uint32_t)ptr > HEAP_END)
         return;
 
     block_t *blk = (block_t *)((uint8_t *)ptr - sizeof(block_t));
 
-    blk->next = heap_free_list;
-    heap_free_list = blk;
+    block_t *curr = heap_free_list;
+    block_t *prev = NULL;
+
+    while (curr && curr < blk)
+    {
+        prev = curr;
+        curr = curr->next;
+    }
+
+    blk->next = curr;
+
+    if (prev)
+        prev->next = blk;
+    else
+        heap_free_list = blk;
+
+    if (blk->next && (uint8_t *)blk + sizeof(block_t) + blk->size == (uint8_t *)blk->next)
+    {
+        blk->size += sizeof(block_t) + blk->next->size;
+        blk->next = blk->next->next;
+    }
+
+    if (prev && (uint8_t *)prev + sizeof(block_t) + prev->size == (uint8_t *)blk)
+    {
+        prev->size += sizeof(block_t) + blk->size;
+        prev->next = blk->next;
+    }
 }
 
 void dump_heap(void)
