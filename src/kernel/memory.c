@@ -25,6 +25,11 @@ void heap_init(void)
 
 void *malloc(uint32_t n)
 {
+    if (n == 0)
+        return NULL;
+
+    n = (n + 7) & ~7;
+
     block_t *best = NULL;
     block_t *best_prev = NULL;
 
@@ -45,12 +50,14 @@ void *malloc(uint32_t n)
     if (best == NULL)
         return NULL;
 
-    if (best->size >= n + sizeof(block_t) + 4)
+    if (best->size >= n + sizeof(block_t) + 8)
     {
         uint8_t *base = (uint8_t *)best;
         block_t *new_block = (block_t *)(base + sizeof(block_t) + n);
+
         new_block->size = best->size - n - sizeof(block_t);
         new_block->next = best->next;
+
         best->next = new_block;
         best->size = n;
     }
@@ -59,9 +66,6 @@ void *malloc(uint32_t n)
         heap_free_list = best->next;
     else
         best_prev->next = best->next;
-
-    serial_write_hex_uint32((uint8_t *)best + sizeof(block_t));
-    serial_write_char('\n');
 
     return (uint8_t *)best + sizeof(block_t);
 }
