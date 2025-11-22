@@ -47,7 +47,7 @@ void serial_write_hex_uint32(uint32_t value)
     {
         int index = (value >> (i * 4)) & 0xF;
         if (index < 10)
-            serial_write_uint32(index);
+            serial_write_uint(index);
         else
             serial_write_char(index + (65 - 10));
     }
@@ -77,9 +77,10 @@ void serial_write_dump_hex_uint32(const unsigned char *dump, int length)
     }
 }
 
-void serial_write_uint8(uint8_t value)
+// writes unsigned number in qemu console
+void serial_write_uint(uint64_t value)
 {
-    char buf[4];
+    char buf[20];
     int i = 0;
 
     if (value == 0)
@@ -88,7 +89,7 @@ void serial_write_uint8(uint8_t value)
         return;
     }
 
-    while (value > 0)
+    while (value)
     {
         buf[i++] = '0' + (value % 10);
         value /= 10;
@@ -98,46 +99,22 @@ void serial_write_uint8(uint8_t value)
         serial_write_char(buf[i]);
 }
 
-void serial_write_uint16(uint16_t value)
+// writes signed number in qemu console
+void serial_write_int(int64_t value)
 {
-    char buf[6];
-    int i = 0;
+    uint64_t u;
 
-    if (value == 0)
+    if (value < 0)
     {
-        serial_write_char('0');
-        return;
+        serial_write_char('-');
+        u = (uint64_t)(~value) + 1;
+    }
+    else
+    {
+        u = (uint64_t)value;
     }
 
-    while (value > 0)
-    {
-        buf[i++] = '0' + (value % 10);
-        value /= 10;
-    }
-
-    while (i--)
-        serial_write_char(buf[i]);
-}
-
-void serial_write_uint32(uint32_t value)
-{
-    char buf[12];
-    int i = 0;
-
-    if (value == 0)
-    {
-        serial_write_char('0');
-        return;
-    }
-
-    while (value > 0)
-    {
-        buf[i++] = '0' + (value % 10);
-        value /= 10;
-    }
-
-    while (i--)
-        serial_write_char(buf[i]);
+    serial_write_uint(u);
 }
 
 void serial_send_palette(uint8_t palette[256][3])
@@ -147,7 +124,7 @@ void serial_send_palette(uint8_t palette[256][3])
         serial_write_char('{');
         for (int j = 0; j < 3; j++)
         {
-            serial_write_uint8(palette[i][j]);
+            serial_write_uint(palette[i][j]);
             if (j < 2)
             {
                 serial_write_char(',');

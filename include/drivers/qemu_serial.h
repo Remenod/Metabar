@@ -18,11 +18,9 @@ void serial_write_dump_hex_uint8(const unsigned char *dump, int length);
 
 void serial_write_dump_hex_uint32(const unsigned char *dump, int length);
 
-void serial_write_uint8(uint8_t value);
+void serial_write_uint(uint64_t value);
 
-void serial_write_uint16(uint16_t value);
-
-void serial_write_uint32(uint32_t value);
+void serial_write_int(int64_t value);
 
 void serial_send_palette(uint8_t palette[256][3]);
 
