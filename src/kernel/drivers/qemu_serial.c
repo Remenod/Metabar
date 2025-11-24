@@ -377,9 +377,6 @@ void serial_write_dump_bin_int64(const int64_t *dump, size_t count)
 // writes float number in qemu console
 void serial_write_float(float value)
 {
-    char buf[32];
-    int len = 0;
-
     if (value < 0)
     {
         serial_write_char('-');
@@ -404,9 +401,6 @@ void serial_write_float(float value)
 // writes double number in qemu console
 void serial_write_double(double value)
 {
-    char buf[32];
-    int len = 0;
-
     if (value < 0)
     {
         serial_write_char('-');
