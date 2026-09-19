@@ -19,7 +19,12 @@ void kernel_main()
     const char done_text[] = "Done\n";
 
     print("Kernel Page Dir Initialization... ");
-    setup_high_half_selfcontained_paging();
+    if (!setup_high_half_selfcontained_paging())
+    {
+        print("Failed: BIOS reported no usable RAM (E820)\n");
+        for (;;)
+            asm volatile("cli; hlt");
+    }
     print(done_text);
 
     print("Setting Initialization... ");
