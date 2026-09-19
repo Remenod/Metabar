@@ -40,7 +40,7 @@ inline void *vir_to_phys_addr(void *virt)
     return (void *)(((uint32_t)virt - KERNEL_VMA) + KERNEL_PHYS_BASE);
 }
 
-void map_page(uint32_t virt, uint32_t phys, uint32_t flags);
+bool_t map_page(uint32_t virt, uint32_t phys, uint32_t flags);
 
 void map_range(uint32_t virt_start, uint32_t phys_start, uint32_t pages, uint32_t flags);
 

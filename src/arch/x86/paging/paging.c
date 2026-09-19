@@ -203,12 +203,15 @@ volatile pte_t *alloc_page_table_virtual(uint32_t pd_index, uint32_t phys_pt)
 }
 
 // maps given VIRTUAL page to PHYSICAL address with provided flags
-void map_page(uint32_t virt, uint32_t phys, uint32_t flags)
+// returns false if a new page table was needed and no frame was available for it
+bool_t map_page(uint32_t virt, uint32_t phys, uint32_t flags)
 {
     volatile pde_t *pde = get_pde(virt);
     if (!pde->fields.present)
     {
         uint32_t pt_phys = alloc_page_table_phys();
+        if (!pt_phys)
+            return false;
         alloc_page_table_virtual(virt >> 22, pt_phys);
     }
 
@@ -219,6 +222,7 @@ void map_page(uint32_t virt, uint32_t phys, uint32_t flags)
     pte->fields.us = (flags & 4) != 0;
 
     asm volatile("invlpg (%0)" ::"r"(virt));
+    return true;
 }
 
 /* * Batch mapping: map_range(virt_start, phys_start, pages, flags)

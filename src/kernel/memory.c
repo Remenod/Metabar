@@ -5,28 +5,61 @@
 
 static block_t *heap_free_list = NULL;
 
+// end of the mapped part of the heap: [HEAP_START, heap_top) is backed by frames
+static uint32_t heap_top = HEAP_START;
+
+/* Maps at least `bytes` more heap pages (one frame at a time, no physical contiguity needed)
+ * and adds them to the free list. Returns false if fewer than `bytes` could be mapped. */
+static bool_t heap_grow(uint32_t bytes)
+{
+    uint32_t need = (bytes + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    uint32_t left = HEAP_END - heap_top;
+    if (need == 0 || need > left)
+        return false;
+
+    uint32_t grow = need < HEAP_GROW_MIN ? HEAP_GROW_MIN : need;
+    if (grow > left)
+        grow = left;
+
+    uint32_t region = heap_top;
+    uint32_t mapped = 0;
+    while (mapped < grow)
+    {
+        uint32_t phys = alloc_frame();
+        if (!phys)
+            break;
+        if (!map_page(heap_top, phys, PAGE_PRESENT | PAGE_RW))
+        {
+            free_frame(phys);
+            break;
+        }
+        heap_top += PAGE_SIZE;
+        mapped += PAGE_SIZE;
+    }
+
+    if (mapped == 0)
+        return false;
+
+    // hand the new region to free(), which also merges it with a free block right before it
+    block_t *blk = (block_t *)region;
+    blk->size = mapped - sizeof(block_t);
+    free((uint8_t *)blk + sizeof(block_t));
+
+    return mapped >= need;
+}
+
 // resets the heap. Call this before first malloc
 void heap_init(void)
 {
-    uint32_t phys = alloc_contiguous_frames((HEAP_END - HEAP_START) / PAGE_SIZE);
-    if (!phys)
-        return;
-    map_range(HEAP_START, phys, (HEAP_END - HEAP_START) / PAGE_SIZE, PAGE_RW | PAGE_PRESENT);
-
-    heap_free_list = (block_t *)HEAP_START;
-    heap_free_list->size = HEAP_END - HEAP_START - sizeof(block_t);
-    heap_free_list->next = NULL;
+    heap_free_list = NULL;
+    heap_top = HEAP_START;
+    heap_grow(HEAP_GROW_MIN);
 }
 
-void *malloc(uint32_t n)
+static block_t *find_best_fit(uint32_t n, block_t **best_prev)
 {
-    if (n == 0)
-        return NULL;
-
-    n = (n + 7) & ~7;
-
     block_t *best = NULL;
-    block_t *best_prev = NULL;
+    *best_prev = NULL;
 
     for (block_t *curr = heap_free_list, *prev = NULL; curr != NULL; prev = curr, curr = curr->next)
     {
@@ -35,15 +68,33 @@ void *malloc(uint32_t n)
             if (best == NULL || curr->size < best->size)
             {
                 best = curr;
-                best_prev = prev;
+                *best_prev = prev;
                 if (curr->size == n)
                     break;
             }
         }
     }
 
-    if (best == NULL)
+    return best;
+}
+
+void *malloc(uint32_t n)
+{
+    if (n == 0 || n > HEAP_END - HEAP_START)
         return NULL;
+
+    n = (n + 7) & ~7;
+
+    block_t *best_prev;
+    block_t *best = find_best_fit(n, &best_prev);
+
+    if (best == NULL)
+    {
+        heap_grow(n + sizeof(block_t));
+        best = find_best_fit(n, &best_prev);
+        if (best == NULL)
+            return NULL;
+    }
 
     if (best->size >= n + sizeof(block_t) + 8)
     {
@@ -70,7 +121,7 @@ void free(void *ptr)
     if (!ptr)
         return;
 
-    if ((uint32_t)ptr < HEAP_START || (uint32_t)ptr > HEAP_END)
+    if ((uint32_t)ptr < HEAP_START + sizeof(block_t) || (uint32_t)ptr >= heap_top)
         return;
 
     block_t *blk = (block_t *)((uint8_t *)ptr - sizeof(block_t));

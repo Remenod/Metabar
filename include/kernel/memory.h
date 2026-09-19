@@ -4,6 +4,7 @@
 
 #define HEAP_START 0xD0000000
 #define HEAP_END 0xE0000000
+#define HEAP_GROW_MIN 0x10000 // heap is mapped on demand, at least this many bytes at a time
 
 typedef struct block block_t;
 
