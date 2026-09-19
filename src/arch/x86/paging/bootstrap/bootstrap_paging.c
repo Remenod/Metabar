@@ -62,9 +62,8 @@ __attribute__((section(".bootstrap"))) static void bootstrap_remap_vga_vram(void
     pde_init(&bootstrap_page_directory[pde_index], (uint32_t)bootstrap_page_table_vga_vram, 1, 0, 0, 0, 0, 0);
 
     uint32_t phys = VGA_PHYS_START;
-    uint32_t virt = VGA_VIRT_START;
 
-    for (int i = 0; phys <= VGA_PHYS_END; i++, phys += 0x1000, virt += 0x1000)
+    for (int i = 0; phys <= VGA_PHYS_END; i++, phys += 0x1000)
     {
         pte_init(&bootstrap_page_table_vga_vram[i], phys, 1, 0, 0, 1, 0, 1, 0);
     }
