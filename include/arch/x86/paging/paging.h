@@ -15,10 +15,18 @@ extern uint8_t __phys_after_kernel;         // from linker script
 #define PAGE_SIZE 0x1000
 #define TOTAL_FRAMES 1024 * 1024
 
-#define HIGH_HALF_STACK_CAPACITY 0x3FFFC
+#define HIGH_HALF_STACK_SIZE 0x40000
+#define HIGH_HALF_STACK_CAPACITY (HIGH_HALF_STACK_SIZE - 4)
 
-#define HIGH_HALF_STACK_BASE (KERNEL_VMA + (KERNEL_PHYS_END - KERNEL_PHYS_BASE))
+// lives in .bss, so its frames are below KERNEL_PHYS_END and get reserved with the kernel
+extern uint8_t kernel_stack[HIGH_HALF_STACK_SIZE];
+
+#define HIGH_HALF_STACK_BASE ((uint32_t)kernel_stack)
 #define HIGH_HALF_STACK_TOP (HIGH_HALF_STACK_BASE + HIGH_HALF_STACK_CAPACITY)
+
+// EBDA, VGA memory, option ROMs and BIOS ROM: never usable RAM
+#define LOW_MEM_RESERVED_START 0x9F000
+#define LOW_MEM_RESERVED_END 0x100000
 
 #define BOOTSTRAP_STACK_BASE 0x60000
 #define BOOTSTRAP_STACK_TOP 0x9FFFC

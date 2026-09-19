@@ -8,6 +8,8 @@
 #include <drivers/qemu_serial.h>
 
 static uint8_t avl_phys_pages_bitmap[TOTAL_FRAMES / 8] = {0};
+
+__attribute__((aligned(PAGE_SIZE))) uint8_t kernel_stack[HIGH_HALF_STACK_SIZE];
 static uint32_t last_avl_frame_index = 0;
 
 static void set_alv_frame(uint32_t index, bool_t val)
@@ -363,11 +365,12 @@ void setup_high_half_selfcontained_paging(void)
     move_stack_to_high_half();
     init_kernel_gdt();
 
+    // kernel image, its .bss and the kernel stack
     for (uint32_t i = 0; i < KERNEL_PHYS_END / PAGE_SIZE; i++)
         set_alv_frame(i, true);
 
-    for (int i = 0xA0000; i <= 0xBFFFF; i++)
-        set_alv_frame(i / PAGE_SIZE, true);
+    for (uint32_t i = LOW_MEM_RESERVED_START / PAGE_SIZE; i < LOW_MEM_RESERVED_END / PAGE_SIZE; i++)
+        set_alv_frame(i, true);
 
     uint32_t kernel_pd_phys = alloc_page_directory_phys();
     if (!kernel_pd_phys)
