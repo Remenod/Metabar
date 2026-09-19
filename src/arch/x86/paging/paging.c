@@ -8,8 +8,6 @@
 #include <drivers/qemu_serial.h>
 
 static uint8_t avl_phys_pages_bitmap[TOTAL_FRAMES / 8] = {0};
-
-__attribute__((aligned(PAGE_SIZE))) uint8_t kernel_stack[HIGH_HALF_STACK_SIZE];
 static uint32_t last_avl_frame_index = 0;
 
 static void set_alv_frame(uint32_t index, bool_t val)
@@ -310,32 +308,6 @@ volatile pde_t *create_page_directory(void)
     return (volatile pde_t *)0xFFFFF000;
 }
 
-static inline void move_stack_to_high_half(void)
-{
-    uint32_t old_esp, old_ebp;
-    asm volatile("mov %%esp, %0" : "=r"(old_esp));
-    asm volatile("mov %%ebp, %0" : "=r"(old_ebp));
-
-    uint32_t offset = HIGH_HALF_STACK_TOP - BOOTSTRAP_STACK_TOP;
-
-    // fix frame chain
-    uint32_t frame = old_ebp;
-    while (frame >= BOOTSTRAP_STACK_BASE && frame <= BOOTSTRAP_STACK_TOP)
-    {
-        uint32_t *next = (uint32_t *)frame;
-        *next += offset;
-        frame = *next;
-    }
-
-    // copy stack contents
-    size_t size = BOOTSTRAP_STACK_TOP - old_esp;
-    memmove((void *)(HIGH_HALF_STACK_TOP - size), (void *)old_esp, size);
-
-    // update registers
-    asm volatile("mov %0, %%esp" ::"r"(HIGH_HALF_STACK_TOP - size));
-    asm volatile("mov %0, %%ebp" ::"r"(old_ebp + offset));
-}
-
 static inline void init_kernel_gdt(void)
 {
     asm volatile("sgdt %0" : "=m"(gp));
@@ -362,7 +334,6 @@ static inline void init_kernel_gdt(void)
 void setup_high_half_selfcontained_paging(void)
 {
     asm volatile("cli");
-    move_stack_to_high_half();
     init_kernel_gdt();
 
     // kernel image, its .bss and the kernel stack

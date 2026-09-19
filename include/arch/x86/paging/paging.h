@@ -15,14 +15,9 @@ extern uint8_t __phys_after_kernel;         // from linker script
 #define PAGE_SIZE 0x1000
 #define TOTAL_FRAMES 1024 * 1024
 
-#define HIGH_HALF_STACK_SIZE 0x40000
-#define HIGH_HALF_STACK_CAPACITY (HIGH_HALF_STACK_SIZE - 4)
-
-// lives in .bss, so its frames are below KERNEL_PHYS_END and get reserved with the kernel
-extern uint8_t kernel_stack[HIGH_HALF_STACK_SIZE];
-
-#define HIGH_HALF_STACK_BASE ((uint32_t)kernel_stack)
-#define HIGH_HALF_STACK_TOP (HIGH_HALF_STACK_BASE + HIGH_HALF_STACK_CAPACITY)
+// high-half kernel stack, defined in kernel_entry.asm (.bss); ESP is switched there before kernel_main
+extern uint8_t kernel_stack[];
+extern uint8_t kernel_stack_top[];
 
 // EBDA, VGA memory, option ROMs and BIOS ROM: never usable RAM
 #define LOW_MEM_RESERVED_START 0x9F000
