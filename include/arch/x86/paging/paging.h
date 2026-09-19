@@ -13,22 +13,39 @@ extern uint8_t __phys_after_kernel;         // from linker script
 #define PAGE_PRESENT 0x1
 #define PAGE_RW 0x2
 #define PAGE_SIZE 0x1000
-#define TOTAL_FRAMES 1024 * 1024
+#define TOTAL_FRAMES (1024 * 1024)
 
 // high-half kernel stack, defined in kernel_entry.asm (.bss); ESP is switched there before kernel_main
 extern uint8_t kernel_stack[];
 extern uint8_t kernel_stack_top[];
 
 // EBDA, VGA memory, option ROMs and BIOS ROM: never usable RAM
+// E820 normally reports it as reserved too, this is a safety net for BIOSes that do not
 #define LOW_MEM_RESERVED_START 0x9F000
 #define LOW_MEM_RESERVED_END 0x100000
+
+// BIOS memory map collected by boot.asm: uint32_t count, then entries
+// readable only while the bootstrap identity mapping of low memory is active
+#define E820_MAP_ADDR 0x1000 // keep in sync with E820_MAP in boot.asm
+#define E820_MAX_ENTRIES 64  // keep in sync with E820_MAX_ENTRIES in boot.asm
+#define E820_TYPE_USABLE 1
+#define E820_ACPI_ATTR_VALID 0x1
+
+typedef struct __attribute__((packed))
+{
+    uint64_t base;
+    uint64_t length;
+    uint32_t type;
+    uint32_t acpi_attrs;
+} e820_entry_t;
 
 #define BOOTSTRAP_STACK_BASE 0x60000
 #define BOOTSTRAP_STACK_TOP 0x9FFFC
 
 #define TEMP_PD_VADDR 0xF0000000
 
-void setup_high_half_selfcontained_paging(void);
+// returns false if there is no usable RAM to build the kernel page directory in (e.g. no E820 map)
+bool_t setup_high_half_selfcontained_paging(void);
 
 inline void *phys_to_vir_addr(uint32_t phys)
 {

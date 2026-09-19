@@ -10,6 +10,9 @@
 static uint8_t avl_phys_pages_bitmap[TOTAL_FRAMES / 8] = {0};
 static uint32_t last_avl_frame_index = 0;
 
+// one past the highest frame of usable RAM, frames above it do not exist
+static uint32_t frames_limit = 0;
+
 static void set_alv_frame(uint32_t index, bool_t val)
 {
     if (!val)
@@ -29,6 +32,63 @@ static bool_t get_alv_frame(uint32_t index)
     }
 
     return val;
+}
+
+/* marks frames of [base, base + length) as used or free, clamped to the 4 GiB the bitmap covers
+ * a free range is shrunk to the whole frames inside it, a used range is grown over partial frames
+ * returns one past the last marked frame, or 0 if nothing was marked */
+static uint32_t set_alv_frame_range(uint64_t base, uint64_t length, bool_t used)
+{
+    uint64_t first = used ? base >> 12 : (base + PAGE_SIZE - 1) >> 12;
+    uint64_t end = used ? (base + length + PAGE_SIZE - 1) >> 12 : (base + length) >> 12;
+
+    if (end > TOTAL_FRAMES)
+        end = TOTAL_FRAMES;
+    if (first >= end)
+        return 0;
+
+    for (uint32_t i = first; i < end; i++)
+        set_alv_frame(i, used);
+
+    return end;
+}
+
+/* Builds the frame bitmap from the BIOS E820 map: a frame is available only if the BIOS reports it as usable RAM.
+ * The map lives in low memory, so this must run while the bootstrap identity mapping is still active.
+ * Returns false if there is no map or no usable RAM in it. */
+static bool_t init_frame_bitmap(void)
+{
+    const uint32_t count = *(volatile uint32_t *)E820_MAP_ADDR;
+    const volatile e820_entry_t *map = (const volatile e820_entry_t *)(E820_MAP_ADDR + 4);
+
+    if (count == 0 || count > E820_MAX_ENTRIES)
+        return false;
+
+    memset(avl_phys_pages_bitmap, 0xFF, sizeof(avl_phys_pages_bitmap));
+    frames_limit = 0;
+
+    for (uint32_t i = 0; i < count; i++)
+    {
+        if (map[i].type != E820_TYPE_USABLE || !(map[i].acpi_attrs & E820_ACPI_ATTR_VALID))
+            continue;
+
+        // RAM above 4 GiB is out of reach without PAE and marks nothing
+        uint32_t end = set_alv_frame_range(map[i].base, map[i].length, false);
+        if (end > frames_limit)
+            frames_limit = end;
+    }
+
+    // entries may overlap: a frame reserved by any entry stays reserved
+    for (uint32_t i = 0; i < count; i++)
+        if (map[i].type != E820_TYPE_USABLE && (map[i].acpi_attrs & E820_ACPI_ATTR_VALID))
+            set_alv_frame_range(map[i].base, map[i].length, true);
+
+    // kernel image, its .bss and the kernel stack; frame 0 is also alloc_frame's "no frame" value
+    set_alv_frame_range(0, KERNEL_PHYS_END, true);
+    set_alv_frame_range(LOW_MEM_RESERVED_START, LOW_MEM_RESERVED_END - LOW_MEM_RESERVED_START, true);
+
+    last_avl_frame_index = 0;
+    return frames_limit != 0;
 }
 
 static gdt_entry_t kernel_gdt[6] = {0};
@@ -66,7 +126,7 @@ static inline void invlpg(void *addr)
 // returns PHYSICAL addres of avaible frame
 uint32_t alloc_frame(void)
 {
-    for (uint32_t i = last_avl_frame_index; i < TOTAL_FRAMES; ++i)
+    for (uint32_t i = last_avl_frame_index; i < frames_limit; ++i)
     {
         if (!get_alv_frame(i))
         {
@@ -94,7 +154,7 @@ uint32_t alloc_contiguous_frames(uint32_t pages)
     uint32_t run = 0;
     uint32_t start = 0;
 
-    for (uint32_t i = last_avl_frame_index; i < TOTAL_FRAMES; ++i)
+    for (uint32_t i = last_avl_frame_index; i < frames_limit; ++i)
     {
         if (!get_alv_frame(i))
         {
@@ -335,21 +395,17 @@ static inline void init_kernel_gdt(void)
         : "memory", "ax");
 }
 
-void setup_high_half_selfcontained_paging(void)
+bool_t setup_high_half_selfcontained_paging(void)
 {
     asm volatile("cli");
     init_kernel_gdt();
 
-    // kernel image, its .bss and the kernel stack
-    for (uint32_t i = 0; i < KERNEL_PHYS_END / PAGE_SIZE; i++)
-        set_alv_frame(i, true);
-
-    for (uint32_t i = LOW_MEM_RESERVED_START / PAGE_SIZE; i < LOW_MEM_RESERVED_END / PAGE_SIZE; i++)
-        set_alv_frame(i, true);
+    if (!init_frame_bitmap())
+        return false;
 
     uint32_t kernel_pd_phys = alloc_page_directory_phys();
     if (!kernel_pd_phys)
-        return;
+        return false;
 
     map_page(TEMP_PD_VADDR, kernel_pd_phys, PAGE_PRESENT | PAGE_RW);
 
@@ -368,4 +424,5 @@ void setup_high_half_selfcontained_paging(void)
     unmap_page(TEMP_PD_VADDR);
 
     load_page_directory_extern((pde_t *)kernel_pd_phys);
+    return true;
 }
