@@ -12,8 +12,9 @@ static func_t pit_tasks[255];
 
 static uint8_t task_count = 0;
 
-void pit_handler(void)
+void pit_handler(const cpu_state_t *state)
 {
+    (void)state;
     timer_ticks++;
     for (uint8_t i = 0; i < task_count; i++)
         pit_tasks[i]();

@@ -35,14 +35,16 @@ but it will only contain EIP CD EFLAGS and int_no, everything else will be zero.
 This is necessary in order to reduce interactions with the stack. */
 
 /* 1 Debug */
-void isr_1() // marked as stateless in cpu_interrupts.asm
+void isr_1(const cpu_state_t *state) // marked as stateless in cpu_interrupts.asm
 {
+    (void)state;
     rsod_add_log("ISR1. No debug code provided");
 }
 
 /* Breakpoint (int3) */
-_Noreturn void isr_3() // marked as stateless in cpu_interrupts.asm
+_Noreturn void isr_3(const cpu_state_t *state) // marked as stateless in cpu_interrupts.asm
 {
+    (void)state;
     asm volatile("cli");
     while (true)
         ;

@@ -19,5 +19,6 @@ typedef struct cpu_state
     uint32_t err_code;
     uint32_t eip, cs, eflags;
 } cpu_state_t;
+typedef void (*isr_t)(const cpu_state_t *state);
 
-void register_interrupt_handler(uint32_t int_no, func_t handler);
+void register_interrupt_handler(uint32_t int_no, isr_t handler);

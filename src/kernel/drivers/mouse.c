@@ -297,8 +297,9 @@ void reset_ui_layer(uint8_t layer)
     ui_elements[layer].bound = NULL;
 }
 
-void mouse_handler(void)
+void mouse_handler(const cpu_state_t *state)
 {
+    (void)state;
     uint8_t data = inb(PS2_DATA_PORT);
 
     packets_buf[mouse_packet_index++] = data;

@@ -2,12 +2,12 @@
 
 #include <ports.h>
 
-static func_t interrupt_handlers[IDT_ENTRIES];
+static isr_t interrupt_handlers[IDT_ENTRIES];
 
 void isr_common_handler(uint32_t int_no)
 {
     if (interrupt_handlers[int_no])
-        interrupt_handlers[int_no]();
+        interrupt_handlers[int_no](NULL);
 
     if (int_no >= 40 && int_no < 48)
         outb(PIC2_COMMAND, PIC_EOI); // slave
@@ -36,7 +36,7 @@ void isr_stateless_exception_handler(
         interrupt_handlers[int_no](&state);
 }
 
-void register_interrupt_handler(uint32_t int_no, func_t handler)
+void register_interrupt_handler(uint32_t int_no, isr_t handler)
 {
     interrupt_handlers[int_no] = handler;
 }

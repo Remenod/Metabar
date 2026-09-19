@@ -37,8 +37,9 @@ static const char *scancode_ascii = scancode_ascii_shiftnt;
 static volatile char last_char = 0;
 static volatile bool_t extended = 0;
 
-void keyboard_handler(void)
+void keyboard_handler(const cpu_state_t *state)
 {
+    (void)state;
     uint8_t scancode = inb(KBD_DATA_PORT);
 
     if (scancode == 0x2A || scancode == 0x36)
