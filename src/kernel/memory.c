@@ -10,7 +10,7 @@ void heap_init(void)
 {
     uint32_t phys = alloc_contiguous_frames((HEAP_END - HEAP_START) / PAGE_SIZE);
     if (!phys)
-        return 0;
+        return;
     map_range(HEAP_START, phys, (HEAP_END - HEAP_START) / PAGE_SIZE, PAGE_RW | PAGE_PRESENT);
 
     heap_free_list = (block_t *)HEAP_START;
@@ -108,9 +108,9 @@ void dump_heap(void)
 {
     serial_write_char('\n');
 
-    for (block_t *curr = heap_free_list, *prev = NULL; curr != NULL; prev = curr, curr = curr->next)
+    for (block_t *curr = heap_free_list; curr != NULL; curr = curr->next)
     {
-        serial_write_hex_uint32(curr);
+        serial_write_hex_uint32((uint32_t)curr);
         serial_write_str(" -> SIZE: ");
         serial_write_hex_uint32(curr->size);
         serial_write_char('\n');
