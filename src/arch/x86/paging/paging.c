@@ -69,7 +69,7 @@ static bool_t init_frame_bitmap(void)
 
     for (uint32_t i = 0; i < count; i++)
     {
-        if (map[i].type != E820_TYPE_USABLE || !(map[i].acpi_attrs & E820_ACPI_ATTR_VALID))
+        if (map[i].type != E820_TYPE_USABLE)
             continue;
 
         // RAM above 4 GiB is out of reach without PAE and marks nothing
@@ -80,7 +80,7 @@ static bool_t init_frame_bitmap(void)
 
     // entries may overlap: a frame reserved by any entry stays reserved
     for (uint32_t i = 0; i < count; i++)
-        if (map[i].type != E820_TYPE_USABLE && (map[i].acpi_attrs & E820_ACPI_ATTR_VALID))
+        if (map[i].type != E820_TYPE_USABLE)
             set_alv_frame_range(map[i].base, map[i].length, true);
 
     // kernel image, its .bss and the kernel stack; frame 0 is also alloc_frame's "no frame" value

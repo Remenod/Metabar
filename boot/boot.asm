@@ -1,6 +1,6 @@
 [org 0x7c00]
 KERNEL_OFFSET equ 0x9000 ; on change also update linker.ld and recompile all *.c files
-E820_MAP equ 0x1000      ; dword count + 24-byte entries; on change also update E820_MAP_ADDR in paging.h
+E820_MAP equ 0x1000      ; dword count + 20-byte entries; on change also update E820_MAP_ADDR in paging.h
 E820_MAX_ENTRIES equ 64  ; on change also update E820_MAX_ENTRIES in paging.h
 
 %ifndef KERNEL_SECTORS
@@ -62,21 +62,20 @@ disk_error:
 ; BIOS memory map (int 0x15, EAX=0xE820) -> E820_MAP
 ; count stays 0 if the BIOS does not support it, the kernel checks that
 detect_memory:
-  mov dword [E820_MAP], 0
-  mov di, E820_MAP + 4
   xor ebx, ebx                ; continuation value, 0 = first entry
+  mov [E820_MAP], ebx
+  mov di, E820_MAP + 4
 .next:
   mov eax, 0xE820
   mov edx, 0x534D4150         ; 'SMAP'
-  mov ecx, 24
-  mov dword [di + 20], 1      ; ACPI attrs "valid" in case the BIOS returns only 20 bytes
+  mov ecx, 20                 ; base, length, type; ACPI 3.0 attributes are ignored, like Linux does
   int 0x15
   jc .done                    ; unsupported or past the last entry
   cmp eax, 0x534D4150
   jne .done
   inc dword [E820_MAP]
-  add di, 24
-  cmp dword [E820_MAP], E820_MAX_ENTRIES
+  add di, 20
+  cmp di, E820_MAP + 4 + 20 * E820_MAX_ENTRIES
   jae .done
   test ebx, ebx               ; 0 = that was the last entry
   jnz .next

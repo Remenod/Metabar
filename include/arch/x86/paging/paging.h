@@ -29,14 +29,13 @@ extern uint8_t kernel_stack_top[];
 #define E820_MAP_ADDR 0x1000 // keep in sync with E820_MAP in boot.asm
 #define E820_MAX_ENTRIES 64  // keep in sync with E820_MAX_ENTRIES in boot.asm
 #define E820_TYPE_USABLE 1
-#define E820_ACPI_ATTR_VALID 0x1
 
+// 20-byte entries: boot.asm does not ask for ACPI 3.0 extended attributes
 typedef struct __attribute__((packed))
 {
     uint64_t base;
     uint64_t length;
     uint32_t type;
-    uint32_t acpi_attrs;
 } e820_entry_t;
 
 #define BOOTSTRAP_STACK_BASE 0x60000
