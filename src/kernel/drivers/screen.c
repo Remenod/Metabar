@@ -106,21 +106,21 @@ uint16_t get_vga_cursor_pos(void)
 
 void print(const char *text)
 {
-    for (uint32_t i = 0; i < strlen(text); i++)
+    for (size_t i = 0; i < strlen(text); i++)
         print_char(text[i]);
 }
 
-void print_dec(int32_t num)
+void print_dec(int64_t num)
 {
     print(int_to_str(num, print_dec_buf));
 }
 
-void print_udec(uint32_t num)
+void print_udec(uint64_t num)
 {
     print(uint_to_str(num, print_dec_buf));
 }
 
-void print_hex(uint32_t val)
+void print_hex(uint64_t val)
 {
     print("0x");
     const char *hex = "0123456789ABCDEF";
@@ -128,7 +128,7 @@ void print_hex(uint32_t val)
         print_char(hex[(val >> (i * 4)) & 0xF]);
 }
 
-void print_bin(uint32_t val, bool_t slicing)
+void print_bin(uint64_t val, bool_t slicing)
 {
     print("0b");
     for (int i = 31; i >= 0; i--)

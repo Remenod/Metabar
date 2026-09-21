@@ -1,24 +1,24 @@
 #include <lib/string.h>
 
-uint32_t strlen(const char *str)
+size_t strlen(const char *str)
 {
-    int len = 0;
+    size_t len = 0;
     while (str[len] != '\0')
         len++;
     return len;
 }
 
-uint32_t strcpy(char *dst, const char *src)
+size_t strcpy(char *dst, const char *src)
 {
-    int i = 0;
+    size_t i = 0;
     while ((dst[i] = src[i]) != '\0')
         i++;
     return i;
 }
 
-void strncpy(char *dst, const char *src, uint32_t n)
+void strncpy(char *dst, const char *src, size_t n)
 {
-    uint32_t i = 0;
+    size_t i = 0;
     while (i < n && src[i] != '\0')
     {
         dst[i] = src[i];
@@ -52,7 +52,7 @@ void strcat(char *dst, const char *src)
         i++;
 }
 
-char *int_to_str(int32_t value, char *str)
+char *int_to_str(int64_t value, char *str)
 {
     char *p = str;
     char *p1, *p2;
@@ -87,7 +87,7 @@ char *int_to_str(int32_t value, char *str)
     return str;
 }
 
-char *uint_to_str(uint32_t value, char *str)
+char *uint_to_str(uint64_t value, char *str)
 {
     char *p = str;
     char *p1, *p2;
@@ -112,7 +112,7 @@ char *uint_to_str(uint32_t value, char *str)
     return str;
 }
 
-char *uint_to_str_hex(uint32_t value, char *str)
+char *uint_to_str_hex(uint64_t value, char *str)
 {
     static const char hex_digits[] = "0123456789ABCDEF";
     char *p = str;
