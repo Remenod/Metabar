@@ -7,7 +7,6 @@
 #include <interrupts/cpu_exceptions.h>
 #include <paging/paging.h>
 #include <a20.h>
-#include <kernel/diagnostics/stack_guard/stack_guard.h>
 #include <kernel/diagnostics/warning_routine.h>
 #include <kernel/settings.h>
 #include <kernel/memory.h>
@@ -73,10 +72,6 @@ void kernel_main()
     print("Calibtating kernel warning loop sleep... ");
     init_kernel_warning_routine();
     print(done_text);
-
-    // print("Installing Stack Guard... ");
-    // stack_guard_install();
-    // print(done_text);
 
     print("Testing VGA modes... ");
     set_graphics_mode();
