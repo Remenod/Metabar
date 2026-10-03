@@ -4,6 +4,7 @@
 #include <paging/gdt.h>
 #include <lib/arrlib.h>
 #include <lib/mem.h>
+#include <kernel/ramdisk.h>
 
 // one bit per frame of usable RAM (1 = used), sized from E820 and placed above 1 MiB by init_frame_bitmap
 static uint8_t *avl_phys_pages_bitmap = NULL;
@@ -95,6 +96,12 @@ static bool_t init_frame_bitmap(void)
             first = HIGH_MEM_START / PAGE_SIZE;
         if (end > window_end)
             end = window_end;
+        // the ramdisk is already sitting in RAM, the bitmap must not land on top of it
+        const uint32_t rd_first = ramdisk_phys_base() / PAGE_SIZE;
+        const uint32_t rd_end = (ramdisk_phys_base() + ramdisk_size()) / PAGE_SIZE;
+        if (ramdisk_size() != 0 && first < rd_end && rd_first < first + bitmap_frames)
+            first = rd_end;
+
         if (first + bitmap_frames <= end && (bitmap_frame == 0 || first < bitmap_frame))
             bitmap_frame = first;
     }
@@ -117,6 +124,7 @@ static bool_t init_frame_bitmap(void)
     set_alv_frame_range(0, KERNEL_PHYS_END, true);
     set_alv_frame_range(LOW_MEM_RESERVED_START, LOW_MEM_RESERVED_END - LOW_MEM_RESERVED_START, true);
     set_alv_frame_range((uint64_t)bitmap_frame * PAGE_SIZE, bitmap_bytes, true);
+    set_alv_frame_range(ramdisk_phys_base(), ramdisk_size(), true); // loaded by stage 2, not ours to hand out
 
     last_avl_frame_index = 0;
     return true;
