@@ -18,6 +18,10 @@ STAGE2_SRC := $(BOOT_DIR)/stage2.asm
 DISK_INC := $(BOOT_DIR)/disk.inc
 ENTRY_SRC := $(SRC_DIR)/kernel/kernel_entry.asm
 
+# appended to the image and loaded into RAM by stage 2 when it exists; `make ramdisk` creates one
+RAMDISK_IMG := ramdisk.img
+RAMDISK_SIZE_MB ?= 16
+
 BOOT_BIN := $(BUILD_DIR)/boot.bin
 STAGE2_BIN := $(BUILD_DIR)/stage2.bin
 ENTRY_OBJ := $(BUILD_DIR)/kernel/kernel_entry.o
@@ -33,7 +37,7 @@ C_OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(C_SRCS))
 CPP_OBJS := $(patsubst $(SRC_DIR)/%.cpp,$(BUILD_DIR)/%.o,$(CPP_SRCS))
 ASM_OBJS := $(patsubst $(SRC_DIR)/%.asm,$(BUILD_DIR)/%.o,$(ASM_SRCS))
 
-.PHONY: all clean run pad_kernel
+.PHONY: all clean run pad_kernel ramdisk
 
 all: $(IMAGE)
 
@@ -60,12 +64,14 @@ $(KERNEL_BIN): $(KERNEL_ELF)
 	$(OBJCOPY) -O binary $< $@
 	$(MAKE) pad_kernel
 
-# image layout: MBR | stage 2 | kernel
+# image layout: MBR | stage 2 | kernel | ramdisk (optional)
 # stage 2 is assembled twice: the first pass only measures how many sectors it takes,
 # which both stages need to know to find what follows it on the disk
-$(IMAGE): $(BOOT_SRC) $(STAGE2_SRC) $(DISK_INC) $(KERNEL_BIN) | $(BUILD_DIR)
+$(IMAGE): $(BOOT_SRC) $(STAGE2_SRC) $(DISK_INC) $(KERNEL_BIN) $(wildcard $(RAMDISK_IMG)) | $(BUILD_DIR)
 	@ksectors=$$(( ($$(stat -c%s $(KERNEL_BIN)) + 511)/512 )); \
-	defines="-DKERNEL_SECTORS=$$ksectors"; \
+	rsectors=0; \
+	if [ -f $(RAMDISK_IMG) ]; then rsectors=$$(( ($$(stat -c%s $(RAMDISK_IMG)) + 511)/512 )); fi; \
+	defines="-DKERNEL_SECTORS=$$ksectors -DRAMDISK_SECTORS=$$rsectors"; \
 	$(ASM) -f bin $(STAGE2_SRC) -o $(STAGE2_BIN) -DSTAGE2_SECTORS=1 $$defines; \
 	ssectors=$$(( ($$(stat -c%s $(STAGE2_BIN)) + 511)/512 )); \
 	$(ASM) -f bin $(STAGE2_SRC) -o $(STAGE2_BIN) -DSTAGE2_SECTORS=$$ssectors $$defines; \
@@ -74,7 +80,8 @@ $(IMAGE): $(BOOT_SRC) $(STAGE2_SRC) $(DISK_INC) $(KERNEL_BIN) | $(BUILD_DIR)
 	truncate -s $$(( ssectors * 512 )) $(STAGE2_BIN); \
 	$(ASM) -f bin $(BOOT_SRC) -o $(BOOT_BIN) -DSTAGE2_SECTORS=$$ssectors; \
 	cat $(BOOT_BIN) $(STAGE2_BIN) $(KERNEL_BIN) > $@; \
-	echo "Sectors - stage2: $$ssectors, kernel: $$ksectors"
+	if [ -f $(RAMDISK_IMG) ]; then cat $(RAMDISK_IMG) >> $@; fi; \
+	echo "Sectors - stage2: $$ssectors, kernel: $$ksectors, ramdisk: $$rsectors"
 
 pad_kernel:
 	@size=$$(stat -c%s $(KERNEL_BIN)); \
@@ -82,6 +89,12 @@ pad_kernel:
 	if [ $$pad -ne 0 ]; then \
 		dd if=/dev/zero bs=1 count=$$pad >> $(KERNEL_BIN); \
 	fi
+
+# a FAT32 volume for the ramdisk; mkfs.vfat warns below 33 MiB but still produces a valid one
+ramdisk:
+	@dd if=/dev/zero of=$(RAMDISK_IMG) bs=1M count=$(RAMDISK_SIZE_MB) status=none
+	@mkfs.vfat -F 32 -n METABAR $(RAMDISK_IMG) > /dev/null
+	@echo "$(RAMDISK_IMG): $(RAMDISK_SIZE_MB) MiB FAT32"
 
 run: $(IMAGE)
 	qemu-system-i386 -serial stdio -drive file=$(IMAGE),format=raw 
