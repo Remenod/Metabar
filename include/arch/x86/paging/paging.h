@@ -15,6 +15,10 @@ extern uint8_t __phys_after_kernel;         // from linker script
 #define PAGE_SIZE 0x1000
 #define TOTAL_FRAMES (1024 * 1024)
 
+// bootstrap maps this much physical memory, starting at KERNEL_PHYS_BASE, at KERNEL_VMA
+#define KERNEL_WINDOW_SIZE 0x400000
+#define HIGH_MEM_START 0x100000
+
 // high-half kernel stack, defined in kernel_entry.asm (.bss); ESP is switched there before kernel_main
 extern uint8_t kernel_stack[];
 extern uint8_t kernel_stack_top[];
@@ -43,7 +47,8 @@ typedef struct __attribute__((packed))
 
 #define TEMP_PD_VADDR 0xF0000000
 
-// returns false if there is no usable RAM to build the kernel page directory in (e.g. no E820 map)
+// returns false if there is not enough usable RAM for the frame bitmap and the kernel page directory (e.g. no E820 map)
+// needs A20 enabled: the frame bitmap is placed above 1 MiB
 bool_t setup_high_half_selfcontained_paging(void);
 
 static inline void *phys_to_vir_addr(uint32_t phys)

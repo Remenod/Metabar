@@ -7,14 +7,17 @@
 
 #include <drivers/qemu_serial.h>
 
-static uint8_t avl_phys_pages_bitmap[TOTAL_FRAMES / 8] = {0};
+// one bit per frame of usable RAM (1 = used), sized from E820 and placed above 1 MiB by init_frame_bitmap
+static uint8_t *avl_phys_pages_bitmap = NULL;
 static uint32_t last_avl_frame_index = 0;
 
-// one past the highest frame of usable RAM, frames above it do not exist
+// one past the highest frame of usable RAM, frames above it do not exist and are not in the bitmap
 static uint32_t frames_limit = 0;
 
 static void set_alv_frame(uint32_t index, bool_t val)
 {
+    if (index >= frames_limit)
+        return;
     if (!val)
     {
         if (index < last_avl_frame_index)
@@ -34,49 +37,85 @@ static bool_t get_alv_frame(uint32_t index)
     return val;
 }
 
-/* marks frames of [base, base + length) as used or free, clamped to the 4 GiB the bitmap covers
- * a free range is shrunk to the whole frames inside it, a used range is grown over partial frames
- * returns one past the last marked frame, or 0 if nothing was marked */
-static uint32_t set_alv_frame_range(uint64_t base, uint64_t length, bool_t used)
+/* marks frames of [base, base + length) as used or free, clamped to the frames the bitmap covers
+ * a free range is shrunk to the whole frames inside it, a used range is grown over partial frames */
+static void set_alv_frame_range(uint64_t base, uint64_t length, bool_t used)
 {
     uint64_t first = used ? base >> 12 : (base + PAGE_SIZE - 1) >> 12;
     uint64_t end = used ? (base + length + PAGE_SIZE - 1) >> 12 : (base + length) >> 12;
 
-    if (end > TOTAL_FRAMES)
-        end = TOTAL_FRAMES;
-    if (first >= end)
-        return 0;
+    if (end > frames_limit)
+        end = frames_limit;
 
-    for (uint32_t i = first; i < end; i++)
+    for (uint64_t i = first; i < end; i++)
         set_alv_frame(i, used);
+}
 
-    return end;
+/* whole frames of a usable E820 entry below 4 GiB as [*first, *end)
+ * returns false for reserved entries and for ones with no whole frame below 4 GiB (no PAE) */
+static bool_t e820_usable_frames(const volatile e820_entry_t *entry, uint32_t *first, uint32_t *end)
+{
+    if (entry->type != E820_TYPE_USABLE)
+        return false;
+
+    uint64_t f = (entry->base + PAGE_SIZE - 1) >> 12;
+    uint64_t e = (entry->base + entry->length) >> 12;
+    if (e > TOTAL_FRAMES)
+        e = TOTAL_FRAMES;
+    if (f >= e)
+        return false;
+
+    *first = f;
+    *end = e;
+    return true;
 }
 
 /* Builds the frame bitmap from the BIOS E820 map: a frame is available only if the BIOS reports it as usable RAM.
- * The map lives in low memory, so this must run while the bootstrap identity mapping is still active.
- * Returns false if there is no map or no usable RAM in it. */
+ * The bitmap covers usable RAM only and lives in the first usable frames above 1 MiB that the kernel window maps,
+ * so low memory stays free for the kernel image. Needs A20 and the bootstrap identity mapping (the E820 map is in
+ * low memory). Returns false if there is no map, no usable RAM or no room above 1 MiB for the bitmap. */
 static bool_t init_frame_bitmap(void)
 {
     const uint32_t count = *(volatile uint32_t *)E820_MAP_ADDR;
     const volatile e820_entry_t *map = (const volatile e820_entry_t *)(E820_MAP_ADDR + 4);
+    uint32_t first, end;
 
     if (count == 0 || count > E820_MAX_ENTRIES)
         return false;
 
-    memset(avl_phys_pages_bitmap, 0xFF, sizeof(avl_phys_pages_bitmap));
     frames_limit = 0;
+    for (uint32_t i = 0; i < count; i++)
+        if (e820_usable_frames(&map[i], &first, &end) && end > frames_limit)
+            frames_limit = end;
+    if (frames_limit == 0)
+        return false;
 
+    const uint32_t bitmap_bytes = ((frames_limit + 7) / 8 + PAGE_SIZE - 1) & ~(PAGE_SIZE - 1);
+    const uint32_t bitmap_frames = bitmap_bytes / PAGE_SIZE;
+    const uint32_t window_end = (KERNEL_PHYS_BASE + KERNEL_WINDOW_SIZE) / PAGE_SIZE;
+
+    // lowest usable spot above 1 MiB that is still inside the kernel window
+    uint32_t bitmap_frame = 0;
     for (uint32_t i = 0; i < count; i++)
     {
-        if (map[i].type != E820_TYPE_USABLE)
+        if (!e820_usable_frames(&map[i], &first, &end))
             continue;
-
-        // RAM above 4 GiB is out of reach without PAE and marks nothing
-        uint32_t end = set_alv_frame_range(map[i].base, map[i].length, false);
-        if (end > frames_limit)
-            frames_limit = end;
+        if (first < HIGH_MEM_START / PAGE_SIZE)
+            first = HIGH_MEM_START / PAGE_SIZE;
+        if (end > window_end)
+            end = window_end;
+        if (first + bitmap_frames <= end && (bitmap_frame == 0 || first < bitmap_frame))
+            bitmap_frame = first;
     }
+    if (bitmap_frame == 0)
+        return false;
+
+    avl_phys_pages_bitmap = phys_to_vir_addr(bitmap_frame * PAGE_SIZE);
+    memset(avl_phys_pages_bitmap, 0xFF, bitmap_bytes);
+
+    for (uint32_t i = 0; i < count; i++)
+        if (map[i].type == E820_TYPE_USABLE)
+            set_alv_frame_range(map[i].base, map[i].length, false);
 
     // entries may overlap: a frame reserved by any entry stays reserved
     for (uint32_t i = 0; i < count; i++)
@@ -86,9 +125,10 @@ static bool_t init_frame_bitmap(void)
     // kernel image, its .bss and the kernel stack; frame 0 is also alloc_frame's "no frame" value
     set_alv_frame_range(0, KERNEL_PHYS_END, true);
     set_alv_frame_range(LOW_MEM_RESERVED_START, LOW_MEM_RESERVED_END - LOW_MEM_RESERVED_START, true);
+    set_alv_frame_range((uint64_t)bitmap_frame * PAGE_SIZE, bitmap_bytes, true);
 
     last_avl_frame_index = 0;
-    return frames_limit != 0;
+    return true;
 }
 
 static gdt_entry_t kernel_gdt[6] = {0};

@@ -37,7 +37,7 @@ void kernel_main()
     print("Kernel Page Dir Initialization... ");
     if (!setup_high_half_selfcontained_paging())
     {
-        print("Failed: BIOS reported no usable RAM (E820)\n");
+        print("Failed: not enough usable RAM (E820)\n");
         halt();
     }
     print(done_text);
