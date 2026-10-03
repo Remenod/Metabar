@@ -17,6 +17,7 @@ disk_init:
   test cl, 1                  ; packet (LBA) access supported
   jz .chs
   mov byte [use_lba], 1
+  mov dword [chs_capacity], 0xFFFFFFFF
   clc
   ret
 .chs:
@@ -26,10 +27,26 @@ disk_init:
   xor di, di                  ; ES:DI = 0 works around buggy BIOSes
   int 0x13
   jc .fail
+  push cx
   and cl, 0x3F
   mov [sectors_per_track], cl
   inc dh
   mov [heads], dh
+
+  pop cx
+  mov al, ch
+  mov ah, cl
+  shr ah, 6
+  inc ax                      ; cylinder count
+  movzx eax, ax
+  movzx bx, byte [heads]
+  mul bx                      ; dx:ax = cylinders * heads
+  shl edx, 16
+  mov dx, ax
+  mov eax, edx
+  movzx ebx, byte [sectors_per_track]
+  mul ebx
+  mov [chs_capacity], eax
   clc
   ret
 .fail:
@@ -123,6 +140,7 @@ sectors_per_read dw SECTORS_PER_READ
 use_lba db 0
 sectors_per_track db 0
 heads db 0
+chs_capacity dd 0             ; one past the last sector CHS can reach
 
 dap:                          ; int 0x13 AH=0x42 disk address packet
   db 0x10, 0                  ; packet size, reserved

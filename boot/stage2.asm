@@ -182,6 +182,10 @@ load_ramdisk:
   cmp eax, RAMDISK_DEST + RAMDISK_SECTORS * 512
   jb .done                    ; this machine is too small for it
 
+  mov eax, STAGE2_LBA + STAGE2_SECTORS + KERNEL_SECTORS + RAMDISK_SECTORS
+  cmp eax, [chs_capacity]
+  ja .done                    ; its tail is past what this BIOS can address
+
   mov si, msg_loading_ramdisk
   call print_str
 
