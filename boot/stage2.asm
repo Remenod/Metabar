@@ -398,10 +398,11 @@ switch_to_pm:
 [bits 32]
 
 init_pm:
-  mov ax, STACK_SEG ; unused
+  ; SS must be the flat data segment: gdt_stack is expand-down with limit 0x4FFFF, so offsets
+  ; below 0x50000 are outside it and the first push would fault
+  mov ax, DATA_SEG
   mov ss, ax
 
-  mov ax, DATA_SEG
   mov gs, ax
   mov es, ax
   mov ds, ax
