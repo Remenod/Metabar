@@ -20,6 +20,8 @@ extern uint8_t __phys_after_kernel;         // from linker script
 #define HIGH_MEM_START 0x100000
 
 // high-half kernel stack, defined in kernel_entry.asm (.bss); ESP is switched there before kernel_main
+// the page right below it is unmapped, so an overflow faults instead of overwriting .bss
+extern uint8_t kernel_stack_guard[];
 extern uint8_t kernel_stack[];
 extern uint8_t kernel_stack_top[];
 

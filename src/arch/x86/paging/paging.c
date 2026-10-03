@@ -464,5 +464,9 @@ bool_t setup_high_half_selfcontained_paging(void)
     unmap_page(TEMP_PD_VADDR);
 
     load_page_directory_extern((pde_t *)kernel_pd_phys);
+
+    // the kernel window's page table is shared with the bootstrap PD, so this removes the page from both
+    unmap_page((uint32_t)kernel_stack_guard);
+
     return true;
 }
