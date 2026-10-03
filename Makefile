@@ -14,9 +14,12 @@ CXXFLAGS := $(CFLAGS) -fno-exceptions -fno-rtti -fno-threadsafe-statics
 LDFLAGS := -T $(SRC_DIR)/kernel/linker.ld
 
 BOOT_SRC := $(BOOT_DIR)/boot.asm
+STAGE2_SRC := $(BOOT_DIR)/stage2.asm
+DISK_INC := $(BOOT_DIR)/disk.inc
 ENTRY_SRC := $(SRC_DIR)/kernel/kernel_entry.asm
 
 BOOT_BIN := $(BUILD_DIR)/boot.bin
+STAGE2_BIN := $(BUILD_DIR)/stage2.bin
 ENTRY_OBJ := $(BUILD_DIR)/kernel/kernel_entry.o
 KERNEL_ELF := $(BUILD_DIR)/kernel.elf
 KERNEL_BIN := $(BUILD_DIR)/kernel.bin
@@ -57,14 +60,21 @@ $(KERNEL_BIN): $(KERNEL_ELF)
 	$(OBJCOPY) -O binary $< $@
 	$(MAKE) pad_kernel
 
-$(BOOT_BIN): $(BOOT_SRC) $(KERNEL_BIN) | $(BUILD_DIR)
-	@size=$$(stat -c%s $(KERNEL_BIN)); \
-	sectors=$$(( ($$size + 511)/512 )); \
-	echo Kernel sectors count: $$sectors; \
-	$(ASM) -f bin $< -o $@ -DKERNEL_SECTORS=$$sectors
-
-$(IMAGE): $(BOOT_BIN) $(KERNEL_BIN)
-	cat $^ > $@
+# image layout: MBR | stage 2 | kernel
+# stage 2 is assembled twice: the first pass only measures how many sectors it takes,
+# which both stages need to know to find what follows it on the disk
+$(IMAGE): $(BOOT_SRC) $(STAGE2_SRC) $(DISK_INC) $(KERNEL_BIN) | $(BUILD_DIR)
+	@ksectors=$$(( ($$(stat -c%s $(KERNEL_BIN)) + 511)/512 )); \
+	defines="-DKERNEL_SECTORS=$$ksectors"; \
+	$(ASM) -f bin $(STAGE2_SRC) -o $(STAGE2_BIN) -DSTAGE2_SECTORS=1 $$defines; \
+	ssectors=$$(( ($$(stat -c%s $(STAGE2_BIN)) + 511)/512 )); \
+	$(ASM) -f bin $(STAGE2_SRC) -o $(STAGE2_BIN) -DSTAGE2_SECTORS=$$ssectors $$defines; \
+	if [ $$(stat -c%s $(STAGE2_BIN)) -gt $$(( ssectors * 512 )) ]; then \
+		echo "stage 2 grew between passes"; exit 1; fi; \
+	truncate -s $$(( ssectors * 512 )) $(STAGE2_BIN); \
+	$(ASM) -f bin $(BOOT_SRC) -o $(BOOT_BIN) -DSTAGE2_SECTORS=$$ssectors; \
+	cat $(BOOT_BIN) $(STAGE2_BIN) $(KERNEL_BIN) > $@; \
+	echo "Sectors - stage2: $$ssectors, kernel: $$ksectors"
 
 pad_kernel:
 	@size=$$(stat -c%s $(KERNEL_BIN)); \
