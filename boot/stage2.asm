@@ -206,6 +206,8 @@ load_ramdisk:
   call copy_to_high
   pop cx
 
+  call progress
+
   movzx eax, cx
   add [rd_lba], eax
   sub [rd_left], eax
@@ -213,6 +215,9 @@ load_ramdisk:
   add [rd_dest], eax
   cmp dword [rd_left], 0
   jne .chunk
+
+  call verify_ramdisk
+  jne .done                   ; what landed in RAM is not what the disk holds
 
   mov dword [RAMDISK_INFO + 4], RAMDISK_DEST
   mov dword [RAMDISK_INFO + 8], RAMDISK_SECTORS * 512
@@ -223,8 +228,60 @@ load_ramdisk:
 %endif
   ret
 
+; Re-reads the first ramdisk sector and compares it with what landed in high memory.
+; Catches a gate A20 that only half works and copies that quietly went nowhere. ZF set when equal.
+verify_ramdisk:
+  mov eax, STAGE2_LBA + STAGE2_SECTORS + KERNEL_SECTORS
+  mov cx, 1
+  mov dx, BOUNCE_SEGMENT
+  call disk_read
+  jc .bad
+
+  cli
+  call unreal_es
+  push ds
+  mov ax, BOUNCE_SEGMENT
+  mov ds, ax
+  xor esi, esi
+  mov edi, RAMDISK_DEST
+  mov ecx, 512 / 4
+  cld
+  a32 repe cmpsd
+  mov bl, 1
+  je .restore
+.bad_unreal:
+  xor bl, bl
+.restore:
+  pop ds
+  xor ax, ax
+  mov es, ax
+  sti
+  cmp bl, 1
+  ret
+.bad:
+  xor bl, bl
+  cmp bl, 1
+  ret
+
+; one dot per 2 MiB copied
+progress:
+  inc byte [rd_chunk]
+  cmp byte [rd_chunk], 64
+  jb .done
+  mov byte [rd_chunk], 0
+  push ax
+  mov ah, 0x0E
+  mov al, '.'
+  int 0x10
+  pop ax
+.done:
+  ret
+
 ; cx sectors from the bounce buffer to [rd_dest]
+; Interrupts stay off for the whole copy: a BIOS handler that reloads ES would drop the 4 GiB
+; limit the CPU is caching for it, and the next write above 64 KiB would fault.
 copy_to_high:
+  cli
   movzx ecx, cx
   shl ecx, 7                  ; sectors * 512 / 4 = dwords
   mov edi, [rd_dest]          ; read it while DS still addresses our variables
@@ -234,8 +291,13 @@ copy_to_high:
   mov ax, BOUNCE_SEGMENT
   mov ds, ax
   xor esi, esi
+  cld                         ; some BIOSes return with the direction flag set
   a32 rep movsd               ; ES carries a 4 GiB limit, so EDI may point above 1 MiB
   pop ds
+
+  xor ax, ax                  ; no BIOS call should see a protected-mode selector in ES
+  mov es, ax
+  sti
   ret
 
 ; Gives ES a 4 GiB limit and returns to real mode without reloading it: the segment register keeps
@@ -254,7 +316,6 @@ unreal_es:
   and al, 0xFE
   mov cr0, eax
   jmp $ + 2
-  sti
   pop eax
   ret
 
@@ -354,6 +415,7 @@ msg_loading_ramdisk db " Loading ramdisk... ", 0
 msg_done            db "done!", 0
 msg_disk_error      db "Disk read error", 0
 
-rd_lba  dd 0
-rd_dest dd 0
-rd_left dd 0
+rd_lba   dd 0
+rd_dest  dd 0
+rd_left  dd 0
+rd_chunk db 0
