@@ -1,6 +1,6 @@
 ; Stage 2: everything the MBR has no room for.
-; Collects the BIOS memory map, loads the kernel, enables A20, copies the ramdisk above 1 MiB
-; through unreal mode, then switches to protected mode and enters the kernel.
+; Collects the BIOS memory map, loads the kernel, enables A20, copies the ramdisk above 1 MiB,
+; then switches to protected mode and enters the kernel.
 
 [org 0x7E00]
 [bits 16]
@@ -243,46 +243,44 @@ progress:
 .done:
   ret
 
-; cx sectors from the bounce buffer to [rd_dest]
-; Interrupts stay off for the whole copy: a BIOS handler that reloads ES would drop the 4 GiB
-; limit the CPU is caching for it, and the next write above 64 KiB would fault.
+; cx sectors from the bounce buffer to [rd_dest], copied during a short trip into protected mode
 copy_to_high:
   cli
   movzx ecx, cx
   shl ecx, 7                  ; sectors * 512 / 4 = dwords
-  mov edi, [rd_dest]          ; read it while DS still addresses our variables
-  call unreal_es
+  mov esi, BOUNCE_SEGMENT << 4
+  mov edi, [rd_dest]
 
-  push ds
-  mov ax, BOUNCE_SEGMENT
-  mov ds, ax
-  xor esi, esi
-  cld                         ; some BIOSes return with the direction flag set
-  a32 rep movsd               ; ES carries a 4 GiB limit, so EDI may point above 1 MiB
-  pop ds
-
-  xor ax, ax                  ; no BIOS call should see a protected-mode selector in ES
-  mov es, ax
-  sti
-  ret
-
-; Gives ES a 4 GiB limit and returns to real mode without reloading it: the segment register keeps
-; the descriptor the CPU cached. int 0x13 reloads ES, so this runs again for every chunk.
-unreal_es:
-  push eax
-  cli
   lgdt [gdt_descriptor]
   mov eax, cr0
   or al, 1
   mov cr0, eax
-  jmp $ + 2
+  jmp CODE_SEG:.protected
+
+[bits 32]
+.protected:
   mov ax, DATA_SEG
+  mov ds, ax
+  mov es, ax
+  cld
+  rep movsd                   ; flat segments: the destination may be anywhere in 4 GiB
+
+  jmp CODE16_SEG:.leaving     ; back through a 16-bit segment, as leaving protected mode requires
+
+[bits 16]
+.leaving:
+  mov ax, DATA16_SEG
+  mov ds, ax
   mov es, ax
   mov eax, cr0
   and al, 0xFE
   mov cr0, eax
-  jmp $ + 2
-  pop eax
+  jmp 0:.real
+.real:
+  xor ax, ax
+  mov ds, ax
+  mov es, ax
+  sti
   ret
 
 ; ===== PRINT TO SCREEN =====
@@ -338,6 +336,22 @@ gdt_test:
   db 11001111b      ; flags + limit high (4 bit)
   db 0x00           ; base high (8 bit)
 
+gdt_code16:         ; only needed to leave protected mode cleanly
+  dw 0xffff
+  dw 0x0000
+  db 0x00
+  db 10011010b
+  db 00000000b      ; 16-bit, byte granularity
+  db 0x00
+
+gdt_data16:
+  dw 0xffff
+  dw 0x0000
+  db 0x00
+  db 10010010b
+  db 00000000b
+  db 0x00
+
 gdt_end:
 
 gdt_descriptor:
@@ -348,6 +362,8 @@ CODE_SEG equ gdt_code - gdt_start
 DATA_SEG equ gdt_data - gdt_start
 STACK_SEG equ gdt_stack - gdt_start
 TEST_SEG equ gdt_test - gdt_start
+CODE16_SEG equ gdt_code16 - gdt_start
+DATA16_SEG equ gdt_data16 - gdt_start
 
 switch_to_pm:
   cli

@@ -130,7 +130,7 @@ static bool_t init_frame_bitmap(void)
     return true;
 }
 
-static gdt_entry_t kernel_gdt[6] = {0};
+static gdt_entry_t kernel_gdt[8] = {0};
 static gdt_ptr_t gp;
 
 extern void load_page_directory_extern(pde_t page_dir[1024]);
