@@ -45,4 +45,7 @@ SECTIONS
 
     __phys_after_kernel = ALIGN(__phys_after_bootstrap_data + SIZEOF(.text) + SIZEOF(.rodata) + SIZEOF(.data) + SIZEOF(.bss) , 0x1000);
 
+    /* boot.asm loads the image to low memory; image and .bss must stay below the EBDA and VGA memory */
+    ASSERT(__phys_after_kernel <= 0x9F000, "kernel image + .bss do not fit below 0x9F000")
+
 }
