@@ -6,11 +6,18 @@
 #include <drivers/vga.h>
 #include <interrupts/cpu_exceptions.h>
 #include <paging/paging.h>
+#include <a20.h>
 #include <kernel/diagnostics/stack_guard/stack_guard.h>
 #include <kernel/diagnostics/warning_routine.h>
 #include <kernel/settings.h>
 #include <kernel/memory.h>
 #include "../../apps/app_selector/app_selector.h"
+
+_Noreturn static void halt(void)
+{
+    for (;;)
+        asm volatile("cli; hlt");
+}
 
 void kernel_main()
 {
@@ -18,12 +25,20 @@ void kernel_main()
 
     const char done_text[] = "Done\n";
 
+    // before paging setup: the frame bitmap goes above 1 MiB
+    print("Enabling A20... ");
+    if (!a20_enable())
+    {
+        print("Failed: A20 line stays disabled\n");
+        halt();
+    }
+    print(done_text);
+
     print("Kernel Page Dir Initialization... ");
     if (!setup_high_half_selfcontained_paging())
     {
         print("Failed: BIOS reported no usable RAM (E820)\n");
-        for (;;)
-            asm volatile("cli; hlt");
+        halt();
     }
     print(done_text);
 
