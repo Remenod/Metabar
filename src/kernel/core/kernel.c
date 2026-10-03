@@ -7,6 +7,7 @@
 #include <interrupts/cpu_exceptions.h>
 #include <paging/paging.h>
 #include <a20.h>
+#include <kernel/ramdisk.h>
 #include <kernel/diagnostics/warning_routine.h>
 #include <kernel/settings.h>
 #include <kernel/memory.h>
@@ -24,6 +25,8 @@ void kernel_main()
 
     const char done_text[] = "Done\n";
 
+    ramdisk_read_boot_info(); // while low memory is still identity mapped
+
     // before paging setup: the frame bitmap goes above 1 MiB
     print("Enabling A20... ");
     if (!a20_enable())
@@ -40,6 +43,17 @@ void kernel_main()
         halt();
     }
     print(done_text);
+
+    print("Mapping ramdisk... ");
+    if (ramdisk_size() == 0)
+        print("none\n");
+    else if (ramdisk_map())
+    {
+        print_dec(ramdisk_sectors());
+        print(" sectors\n");
+    }
+    else
+        print("Failed\n");
 
     print("Setting Initialization... ");
     settings_init();
