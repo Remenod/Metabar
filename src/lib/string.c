@@ -137,3 +137,27 @@ char *uint_to_str_hex(uint32_t value, char *str)
 
     return str;
 }
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wimplicit-fallthrough"
+
+int str_to_int(const char *s)
+{
+    int n = 0;
+    bool_t neg = false;
+    while (is_space(*s))
+        s++;
+    switch (*s)
+    {
+    case '-':
+        neg = true;
+    case '+':
+        s++;
+    }
+    /* Compute n as a negative number to avoid overflow on INT_MIN */
+    while (is_digit(*s))
+        n = 10 * n - (*s++ - '0');
+    return neg ? n : -n;
+}
+
+#pragma GCC diagnostic pop

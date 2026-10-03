@@ -14,4 +14,4 @@ typedef struct
 
 int setjmp(jmp_buf_t *buf);
 
-void longjmp(jmp_buf_t *buf, int arg);
+_Noreturn void longjmp(jmp_buf_t *buf, int arg);

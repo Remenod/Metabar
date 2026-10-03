@@ -10,6 +10,7 @@
 #include "../segment_test/segment_test.h"
 #include "../mouse_playground/mouse_playground.h"
 #include "../settings_manager/settings_manager.h"
+#include "../expr_eval/expr_eval_main.h"
 
 typedef struct
 {
@@ -23,6 +24,7 @@ static App apps[] = {
     {"RSoD Roulette", rsod_roulette_main},
     {"Segment Test", segment_test_main},
     {"Mouse Playground", mouse_playground_main},
+    {"Expression Evaluator", eval_expr_main},
     {"Settings", settings_manager_main},
 };
 
