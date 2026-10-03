@@ -15,7 +15,13 @@ extern uint8_t __phys_after_kernel;         // from linker script
 #define PAGE_SIZE 0x1000
 #define TOTAL_FRAMES (1024 * 1024)
 
+// bootstrap maps this much physical memory, starting at KERNEL_PHYS_BASE, at KERNEL_VMA
+#define KERNEL_WINDOW_SIZE 0x400000
+#define HIGH_MEM_START 0x100000
+
 // high-half kernel stack, defined in kernel_entry.asm (.bss); ESP is switched there before kernel_main
+// the page right below it is unmapped, so an overflow faults instead of overwriting .bss
+extern uint8_t kernel_stack_guard[];
 extern uint8_t kernel_stack[];
 extern uint8_t kernel_stack_top[];
 
@@ -29,14 +35,13 @@ extern uint8_t kernel_stack_top[];
 #define E820_MAP_ADDR 0x1000 // keep in sync with E820_MAP in boot.asm
 #define E820_MAX_ENTRIES 64  // keep in sync with E820_MAX_ENTRIES in boot.asm
 #define E820_TYPE_USABLE 1
-#define E820_ACPI_ATTR_VALID 0x1
 
+// 20-byte entries: boot.asm does not ask for ACPI 3.0 extended attributes
 typedef struct __attribute__((packed))
 {
     uint64_t base;
     uint64_t length;
     uint32_t type;
-    uint32_t acpi_attrs;
 } e820_entry_t;
 
 #define BOOTSTRAP_STACK_BASE 0x60000
@@ -44,15 +49,16 @@ typedef struct __attribute__((packed))
 
 #define TEMP_PD_VADDR 0xF0000000
 
-// returns false if there is no usable RAM to build the kernel page directory in (e.g. no E820 map)
+// returns false if there is not enough usable RAM for the frame bitmap and the kernel page directory (e.g. no E820 map)
+// needs A20 enabled: the frame bitmap is placed above 1 MiB
 bool_t setup_high_half_selfcontained_paging(void);
 
-inline void *phys_to_vir_addr(uint32_t phys)
+static inline void *phys_to_vir_addr(uint32_t phys)
 {
     return (void *)((phys - KERNEL_PHYS_BASE) + KERNEL_VMA);
 }
 
-inline void *vir_to_phys_addr(void *virt)
+static inline void *vir_to_phys_addr(void *virt)
 {
     return (void *)(((uint32_t)virt - KERNEL_VMA) + KERNEL_PHYS_BASE);
 }

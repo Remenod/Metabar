@@ -16,9 +16,13 @@ _start:
     jmp $
 
 ; lives in .bss, so its frames are below __phys_after_kernel and get reserved with the kernel
+; 16 KiB: all apps, IRQs and an RSOD together peaked at ~0.5 KiB
 section .bss nobits alloc noexec write align=4096
+global kernel_stack_guard
 global kernel_stack
 global kernel_stack_top
+kernel_stack_guard:
+    resb 0x1000 ; unmapped by setup_high_half_selfcontained_paging, an overflow faults here
 kernel_stack:
-    resb 0x40000
+    resb 0x4000
 kernel_stack_top:
