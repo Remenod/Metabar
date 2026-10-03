@@ -25,14 +25,7 @@ static void set_alv_frame(uint32_t index, bool_t val)
 }
 static bool_t get_alv_frame(uint32_t index)
 {
-    bool_t val = get_bitmap8_val(avl_phys_pages_bitmap, index);
-    if (!val)
-    {
-        if (index < last_avl_frame_index)
-            last_avl_frame_index = index;
-    }
-
-    return val;
+    return get_bitmap8_val(avl_phys_pages_bitmap, index);
 }
 
 /* marks frames of [base, base + length) as used or free, clamped to the frames the bitmap covers
@@ -152,9 +145,44 @@ uint32_t alloc_frame(void)
         if (!get_alv_frame(i))
         {
             set_alv_frame(i, true);
+            last_avl_frame_index = i + 1;
             return i * PAGE_SIZE;
         }
     }
+    return 0;
+}
+
+/* Allocates `pages` frames that are next to each other in physical memory, with the first one
+ * aligned to `align` bytes (a power of two, rounded up to a page). Devices need this for DMA.
+ * Returns the physical address of the first frame, or 0 if there is no such run. */
+uint32_t alloc_contiguous_frames(uint32_t pages, uint32_t align)
+{
+    if (pages == 0 || pages > frames_limit)
+        return 0;
+
+    uint32_t step = align > PAGE_SIZE ? align / PAGE_SIZE : 1;
+    uint32_t start = last_avl_frame_index;
+    start = (start + step - 1) / step * step;
+
+    while (start + pages <= frames_limit)
+    {
+        uint32_t i = start;
+        while (i < start + pages && !get_alv_frame(i))
+            ++i;
+
+        if (i == start + pages)
+        {
+            for (uint32_t j = start; j < start + pages; ++j)
+                set_alv_frame(j, true);
+            if (start + pages > last_avl_frame_index)
+                last_avl_frame_index = start + pages;
+            return start * PAGE_SIZE;
+        }
+
+        // frame i is taken, so the next run can only start after it
+        start = (i + 1 + step - 1) / step * step;
+    }
+
     return 0;
 }
 
@@ -162,6 +190,12 @@ uint32_t alloc_frame(void)
 void free_frame(uint32_t phys_addr)
 {
     set_alv_frame(phys_addr / PAGE_SIZE, false);
+}
+
+void free_frames(uint32_t phys_addr, uint32_t pages)
+{
+    for (uint32_t i = 0; i < pages; ++i)
+        set_alv_frame(phys_addr / PAGE_SIZE + i, false);
 }
 
 // returns PHYSICAL addres of avaible frame
@@ -244,6 +278,21 @@ bool_t map_page(uint32_t virt, uint32_t phys, uint32_t flags)
 
     asm volatile("invlpg (%0)" ::"r"(virt));
     return true;
+}
+
+/* PHYSICAL address a virtual one currently maps to, or 0 if the page is not mapped.
+ * Works for any address of the current page directory, unlike vir_to_phys_addr,
+ * which only knows the linear kernel window. */
+uint32_t virt_to_phys(uint32_t virt)
+{
+    if (!get_pde(virt)->fields.present)
+        return 0;
+
+    volatile pte_t *pte = get_pte(virt);
+    if (!pte->fields.present)
+        return 0;
+
+    return (pte->fields.addr << 12) | (virt & 0xFFF);
 }
 
 // unmaps given VIRTUAL page if it is present in page table

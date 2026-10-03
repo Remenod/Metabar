@@ -65,6 +65,13 @@ void unmap_page(uint32_t virt);
 
 uint32_t alloc_frame(void);
 
+// `pages` frames in a row, first one aligned to `align` bytes; 0 if there is no such run
+uint32_t alloc_contiguous_frames(uint32_t pages, uint32_t align);
+
 void free_frame(uint32_t phys_addr);
+
+void free_frames(uint32_t phys_addr, uint32_t pages);
+
+uint32_t virt_to_phys(uint32_t virt);
 
 volatile pde_t *create_page_directory(void);
