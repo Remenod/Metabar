@@ -46,12 +46,12 @@ typedef struct __attribute__((packed))
 // returns false if there is no usable RAM to build the kernel page directory in (e.g. no E820 map)
 bool_t setup_high_half_selfcontained_paging(void);
 
-inline void *phys_to_vir_addr(uint32_t phys)
+static inline void *phys_to_vir_addr(uint32_t phys)
 {
     return (void *)((phys - KERNEL_PHYS_BASE) + KERNEL_VMA);
 }
 
-inline void *vir_to_phys_addr(void *virt)
+static inline void *vir_to_phys_addr(void *virt)
 {
     return (void *)(((uint32_t)virt - KERNEL_VMA) + KERNEL_PHYS_BASE);
 }
