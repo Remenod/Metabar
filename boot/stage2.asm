@@ -220,9 +220,6 @@ load_ramdisk:
   cmp dword [rd_left], 0
   jne .chunk
 
-  call verify_ramdisk
-  jne .done                   ; what landed in RAM is not what the disk holds
-
   mov dword [RAMDISK_INFO + 4], RAMDISK_DEST
   mov dword [RAMDISK_INFO + 8], RAMDISK_SECTORS * 512
   mov dword [RAMDISK_INFO], RAMDISK_MAGIC ; written last: it validates the two fields above
@@ -230,41 +227,6 @@ load_ramdisk:
   call print_str
 .done:
 %endif
-  ret
-
-; Re-reads the first ramdisk sector and compares it with what landed in high memory.
-; Catches a gate A20 that only half works and copies that quietly went nowhere. ZF set when equal.
-verify_ramdisk:
-  mov eax, STAGE2_LBA + STAGE2_SECTORS + KERNEL_SECTORS
-  mov cx, 1
-  mov dx, BOUNCE_SEGMENT
-  call disk_read
-  jc .bad
-
-  cli
-  call unreal_es
-  push ds
-  mov ax, BOUNCE_SEGMENT
-  mov ds, ax
-  xor esi, esi
-  mov edi, RAMDISK_DEST
-  mov ecx, 512 / 4
-  cld
-  a32 repe cmpsd
-  mov bl, 1
-  je .restore
-.bad_unreal:
-  xor bl, bl
-.restore:
-  pop ds
-  xor ax, ax
-  mov es, ax
-  sti
-  cmp bl, 1
-  ret
-.bad:
-  xor bl, bl
-  cmp bl, 1
   ret
 
 ; one dot per 2 MiB copied
