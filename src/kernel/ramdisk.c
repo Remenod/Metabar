@@ -1,7 +1,11 @@
 #include <kernel/ramdisk.h>
 
 #include <paging/paging.h>
+#include <kernel/block.h>
 #include <lib/mem.h>
+
+// filled in once the window is mapped, then handed to the block layer
+static block_device_t device = {"ramdisk", 0, ramdisk_read};
 
 static uint32_t phys_base = 0;
 static uint32_t byte_size = 0;
@@ -55,6 +59,12 @@ bool_t ramdisk_map(void)
     }
 
     mapped = byte_size != 0;
+    if (mapped)
+    {
+        device.sectors = ramdisk_sectors();
+        block_register(&device);
+    }
+
     return mapped;
 }
 
