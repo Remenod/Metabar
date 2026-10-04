@@ -12,7 +12,10 @@
 #define LINE_MAX 128
 #define PATH_MAX 256
 #define ARGS_MAX 8
-#define TREE_DEPTH_MAX 8 // every level of a recursive delete costs a directory entry on the stack
+#define TREE_DEPTH_MAX 8  // every level of a recursive delete costs a directory entry on the stack
+#define GLOB_ARGS_MAX 32  // one pattern can stand for many names, so the expanded line is longer
+#define GLOB_POOL 2048    // and all of them together have to fit in here
+#define GLOB_DEPTH_MAX 8
 
 static char cwd[PATH_MAX] = "/";
 static char tree_path[PATH_MAX]; // rm -r walks with this one instead of a buffer per level
@@ -112,6 +115,197 @@ static void make_path(char *out_path, const char *argument)
 
     normalize(out_path);
 }
+
+/* --- patterns ------------------------------------------------------------------------------- */
+
+static char *glob_argv[GLOB_ARGS_MAX];
+static char glob_pool[GLOB_POOL];
+static uint32_t glob_count;
+static uint32_t glob_used;
+static char glob_path[PATH_MAX]; // the path built so far, shaped the way the pattern was written
+
+static char upper(char c)
+{
+    return c >= 'a' && c <= 'z' ? (char)(c - 'a' + 'A') : c;
+}
+
+static bool_t has_star(const char *text, uint32_t length)
+{
+    for (uint32_t i = 0; i < length && text[i] != '\0'; i++)
+        if (text[i] == '*')
+            return true;
+
+    return false;
+}
+
+/* Matches one name against one piece of a pattern, where a star stands for any run of characters
+ * inside that name. Walking back to the last star is what lets "a*b*c" try every way of cutting
+ * the name up between its stars instead of giving up at the first one that does not fit. */
+static bool_t match_piece(const char *pattern, uint32_t length, const char *name)
+{
+    uint32_t p = 0;
+    uint32_t n = 0;
+    uint32_t star = length + 1; // nothing above length is a position, so this means "no star yet"
+    uint32_t after_star = 0;
+
+    while (name[n] != '\0')
+    {
+        if (p < length && pattern[p] == '*')
+        {
+            star = p++;
+            after_star = n;
+        }
+        else if (p < length && upper(pattern[p]) == upper(name[n]))
+        {
+            p++;
+            n++;
+        }
+        else if (star <= length)
+        {
+            p = star + 1;
+            n = ++after_star;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    while (p < length && pattern[p] == '*')
+        p++;
+
+    return p == length;
+}
+
+static void glob_emit(const char *path)
+{
+    const uint32_t size = strlen(path) + 1;
+
+    if (glob_count == GLOB_ARGS_MAX || glob_used + size > GLOB_POOL)
+        return; // more names than one line can carry: the rest are left out rather than half shown
+
+    strcpy(glob_pool + glob_used, path);
+    glob_argv[glob_count++] = glob_pool + glob_used;
+    glob_used += size;
+}
+
+static void glob_append(const char *name, uint32_t length)
+{
+    uint32_t at = strlen(glob_path);
+
+    if (at + length + 2 >= PATH_MAX)
+        return;
+
+    if (at > 0 && glob_path[at - 1] != '/')
+        glob_path[at++] = '/';
+
+    for (uint32_t i = 0; i < length; i++)
+        glob_path[at++] = name[i];
+
+    glob_path[at] = '\0';
+}
+
+/* Walks what is left of the pattern against the directory reached so far. Names are collected in
+ * the shape the pattern had, absolute or not, so that what comes out can be typed straight back. */
+static void glob_walk(const char *pattern, uint32_t depth)
+{
+    fat32_entry_t entry;
+    fat32_dir_t dir;
+    char full[PATH_MAX];
+
+    if (depth > GLOB_DEPTH_MAX)
+        return;
+
+    while (*pattern == '/')
+        pattern++;
+
+    const uint32_t base = strlen(glob_path);
+
+    if (*pattern == '\0') // the pattern ran out, so whatever it led to is a match
+    {
+        make_path(full, glob_path);
+        if (fat32_stat(full, &entry))
+            glob_emit(glob_path);
+        return;
+    }
+
+    uint32_t length = 0;
+    while (pattern[length] != '\0' && pattern[length] != '/')
+        length++;
+
+    const char *rest = pattern + length;
+
+    if (!has_star(pattern, length)) // a plain name: step into it and carry on
+    {
+        glob_append(pattern, length);
+        glob_walk(rest, depth + 1);
+        glob_path[base] = '\0';
+        return;
+    }
+
+    const bool_t deep = length == 2 && pattern[0] == '*' && pattern[1] == '*';
+
+    if (deep)
+    {
+        if (*rest == '\0')
+            rest = "/*"; // "**" by itself means everything underneath, which is what "**/*" says
+
+        glob_walk(rest, depth + 1); // a double star stands for no directory at all as well
+    }
+
+    make_path(full, base == 0 ? "." : glob_path);
+
+    if (!fat32_open_dir(full, &dir))
+        return;
+
+    while (fat32_next_entry(&dir, &entry))
+    {
+        if (entry.name[0] == '.')
+            continue; // "." and ".." would send this in circles, and hidden names stay hidden
+
+        if (deep && !entry.is_dir)
+            continue;
+
+        if (!deep && !match_piece(pattern, length, entry.name))
+            continue;
+
+        glob_append(entry.name, strlen(entry.name));
+        glob_walk(deep ? pattern : rest, depth + 1); // a double star stays, to reach deeper still
+        glob_path[base] = '\0';
+    }
+}
+
+/* Puts every name a pattern stands for in place of the pattern. One that matches nothing is left
+ * as it was, so the command can complain about the name that was actually typed. */
+static uint32_t expand_patterns(uint32_t argc, char **argv)
+{
+    glob_count = 0;
+    glob_used = 0;
+
+    for (uint32_t i = 0; i < argc; i++)
+    {
+        const uint32_t before = glob_count;
+
+        if (i == 0 || !fat32_mounted() || !has_star(argv[i], strlen(argv[i])))
+        {
+            glob_emit(argv[i]);
+            continue;
+        }
+
+        glob_path[0] = '\0';
+        if (argv[i][0] == '/')
+            strcpy(glob_path, "/");
+
+        glob_walk(argv[i], 0);
+
+        if (glob_count == before)
+            glob_emit(argv[i]);
+    }
+
+    return glob_count;
+}
+
+/* --- commands ------------------------------------------------------------------------------- */
 
 static void cmd_help(uint32_t argc, char **argv);
 
@@ -595,7 +789,8 @@ static void cmd_help(uint32_t argc, char **argv)
     (void)argc;
     (void)argv;
 
-    print("names with spaces go in quotes: cat \"Loader Notes.txt\"\n\n");
+    print("names with spaces go in quotes: cat \"Loader Notes.txt\"\n");
+    print("* stands for any part of a name, ** for any run of directories: rm **/*.tmp\n\n");
 
     for (uint32_t i = 0; i < COMMAND_COUNT; i++)
     {
@@ -700,17 +895,19 @@ void shell_main(void)
 
         read_line(line);
 
-        const uint32_t argc = split(line, argv);
+        uint32_t argc = split(line, argv);
         if (argc == 0)
             continue;
 
+        argc = expand_patterns(argc, argv); // from here on the arguments are the expanded ones
+
         uint32_t i = 0;
-        while (i < COMMAND_COUNT && strcmp(commands[i].name, argv[0]) != 0)
+        while (i < COMMAND_COUNT && strcmp(commands[i].name, glob_argv[0]) != 0)
             i++;
 
         if (i == COMMAND_COUNT)
-            fail(argv[0], "no such command, try help");
+            fail(glob_argv[0], "no such command, try help");
         else
-            commands[i].run(argc, argv);
+            commands[i].run(argc, glob_argv);
     }
 }
