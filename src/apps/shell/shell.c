@@ -2,6 +2,8 @@
 
 #include <drivers/screen.h>
 #include <drivers/keyboard.h>
+#include <drivers/speaker.h>
+#include <timer/pit.h>
 #include <kernel/block.h>
 #include <kernel/fat32.h>
 #include <kernel/memory.h>
@@ -823,6 +825,174 @@ static void cmd_umount(uint32_t argc, char **argv)
     strcpy(cwd, "/");
 }
 
+/* The words beep(1) takes, so that a script written for it plays here unchanged. What a note
+ * does not say for itself falls back to the same numbers beep(1) falls back to. */
+#define BEEP_DEFAULT_HZ 440
+#define BEEP_DEFAULT_MS 200
+#define BEEP_DEFAULT_DELAY 100
+#define BEEP_LONGEST_MS 60000 // a mistyped number should not hold the machine for a day
+
+typedef struct
+{
+    uint32_t hz;
+    uint32_t length;
+    uint32_t delay;
+    bool_t delay_at_end; // -D waits after the last repetition as well, -d only between them
+    uint32_t times;
+} note_t;
+
+static uint32_t to_number(const char *text, uint32_t fallback)
+{
+    uint32_t value = 0;
+
+    if (text == NULL || text[0] == '\0')
+        return fallback;
+
+    for (uint32_t i = 0; text[i] != '\0'; i++)
+    {
+        if (text[i] < '0' || text[i] > '9')
+            return fallback;
+
+        value = value * 10 + (uint32_t)(text[i] - '0');
+    }
+
+    return value;
+}
+
+static void note_defaults(note_t *note)
+{
+    note->hz = BEEP_DEFAULT_HZ;
+    note->length = BEEP_DEFAULT_MS;
+    note->delay = BEEP_DEFAULT_DELAY;
+    note->delay_at_end = false;
+    note->times = 1;
+}
+
+// counted the long way round, because a 64 bit division has no helper to call in this kernel
+static uint64_t ticks_for(uint32_t ms)
+{
+    const uint32_t frequency = get_timer_frequency();
+
+    if (ms > BEEP_LONGEST_MS)
+        ms = BEEP_LONGEST_MS;
+
+    return (uint64_t)(ms / 1000) * frequency + (ms % 1000 * frequency + 999) / 1000;
+}
+
+/* Waits for the tick a note is due to end on rather than for a length of time, so that the
+ * rounding of one note cannot push every note after it later. Esc gives up on the whole line. */
+static bool_t wait_until(uint64_t deadline)
+{
+    while (get_timer_ticks() < deadline)
+    {
+        if (get_keyboard_char() == KEY_ESC)
+            return false;
+
+        asm volatile("hlt");
+    }
+
+    return true;
+}
+
+static bool_t play_note(const note_t *note, uint64_t *deadline)
+{
+    for (uint32_t i = 0; i < note->times; i++)
+    {
+        speaker_on(note->hz); // a frequency it cannot reach stays silent, and keeps the timing
+        *deadline += ticks_for(note->length);
+
+        const bool_t carry_on = wait_until(*deadline);
+        speaker_off();
+
+        if (!carry_on)
+            return false;
+
+        if (i + 1 == note->times && !note->delay_at_end)
+            break;
+
+        *deadline += ticks_for(note->delay);
+
+        if (!wait_until(*deadline))
+            return false;
+    }
+
+    return true;
+}
+
+static bool_t out_of_reach(const note_t *note)
+{
+    return note->hz < SPEAKER_MIN_HZ || note->hz > SPEAKER_MAX_HZ;
+}
+
+static void cmd_beep(uint32_t argc, char **argv)
+{
+    uint64_t deadline = get_timer_ticks();
+    bool_t silent_note = false;
+    uint32_t bare = 0; // "beep 554 692" says the same as "-f 554 -l 692", which is easier to type
+    note_t note;
+
+    note_defaults(&note);
+
+    for (uint32_t i = 1; i < argc; i++)
+    {
+        const char *word = argv[i];
+        const char *value = i + 1 < argc ? argv[i + 1] : NULL;
+
+        if (strcmp(word, "-n") == 0) // every -n ends a note and starts another from the defaults
+        {
+            silent_note = silent_note || out_of_reach(&note);
+
+            if (!play_note(&note, &deadline))
+                return;
+
+            note_defaults(&note);
+            bare = 0;
+            continue;
+        }
+
+        if (strcmp(word, "-f") == 0)
+            note.hz = to_number(value, note.hz);
+        else if (strcmp(word, "-l") == 0)
+            note.length = to_number(value, note.length);
+        else if (strcmp(word, "-D") == 0)
+        {
+            note.delay = to_number(value, note.delay);
+            note.delay_at_end = true;
+        }
+        else if (strcmp(word, "-d") == 0)
+        {
+            note.delay = to_number(value, note.delay);
+            note.delay_at_end = false;
+        }
+        else if (strcmp(word, "-r") == 0)
+            note.times = to_number(value, note.times);
+        else if (bare == 0)
+        {
+            note.hz = to_number(word, note.hz);
+            bare++;
+            continue;
+        }
+        else if (bare == 1)
+        {
+            note.length = to_number(word, note.length);
+            bare++;
+            continue;
+        }
+        else
+        {
+            continue;
+        }
+
+        i++; // the flags above all took the word after them
+    }
+
+    silent_note = silent_note || out_of_reach(&note);
+    play_note(&note, &deadline);
+
+    if (silent_note)
+        fail("beep", "a frequency outside 19..20000 Hz sounds as silence");
+}
+
 static void cmd_atto(uint32_t argc, char **argv)
 {
     char path[PATH_MAX];
@@ -863,6 +1033,7 @@ static const command_t commands[] = {
     {"lsblk", cmd_lsblk, "lsblk                 block devices"},
     {"mount", cmd_mount, "mount [device]        mount one of them"},
     {"umount", cmd_umount, "umount                let go of it"},
+    {"beep", cmd_beep, "beep [hz] [ms]        a note, or beep(1) flags: -f -l -d -D -r -n"},
     {"clear", cmd_clear, "clear                 wipe the screen"},
     {"exit", cmd_exit, "exit                  back to the selector"},
 };
