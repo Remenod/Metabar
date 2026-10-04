@@ -874,7 +874,8 @@ static void cmd_help(uint32_t argc, char **argv)
     (void)argv;
 
     print("names with spaces go in quotes: cat \"Loader Notes.txt\"\n");
-    print("* stands for any part of a name, ** for any run of directories: rm **/*.tmp\n\n");
+    print("* stands for any part of a name, ** for any run of directories: rm **/*.tmp\n");
+    print("Up and Down walk back through what was typed\n\n");
 
     for (uint32_t i = 0; i < COMMAND_COUNT; i++)
     {
@@ -884,9 +885,50 @@ static void cmd_help(uint32_t argc, char **argv)
     }
 }
 
+/* --- the line being typed --------------------------------------------------------------------- */
+
+#define HISTORY_MAX 16
+
+static char history[HISTORY_MAX][LINE_MAX];
+static uint32_t history_count;
+
+static void history_add(const char *line)
+{
+    if (line[0] == '\0')
+        return;
+
+    if (history_count > 0 && strcmp(history[history_count - 1], line) == 0)
+        return; // the same line twice over is worth keeping once
+
+    if (history_count == HISTORY_MAX) // the oldest one falls off the end
+    {
+        for (uint32_t i = 1; i < HISTORY_MAX; i++)
+            strcpy(history[i - 1], history[i]);
+
+        history_count--;
+    }
+
+    strcpy(history[history_count++], line);
+}
+
+// rubs out what stands on the line and puts something else in its place
+static void replace_line(char *line, uint32_t *length, const char *with)
+{
+    while (*length > 0)
+    {
+        print_char('\b');
+        (*length)--;
+    }
+
+    strcpy(line, with);
+    *length = strlen(line);
+    print(line);
+}
+
 static void read_line(char *line)
 {
     uint32_t length = 0;
+    uint32_t browse = history_count; // where the arrows stand, the far end being the new line
 
     for (;;)
     {
@@ -905,7 +947,22 @@ static void read_line(char *line)
         {
             print_char('\n');
             line[length] = '\0';
+            history_add(line);
             return;
+        }
+
+        if (c == KEY_UP && browse > 0)
+        {
+            browse--;
+            replace_line(line, &length, history[browse]);
+            continue;
+        }
+
+        if (c == KEY_DOWN && browse < history_count)
+        {
+            browse++;
+            replace_line(line, &length, browse == history_count ? "" : history[browse]);
+            continue;
         }
 
         if (c == '\b')
@@ -971,6 +1028,7 @@ void shell_main(void)
     set_vga_cursor_visibility(true);
     clear_screen();
     print("Metabar shell. help lists what it knows, Esc leaves.\n\n");
+    history_count = 0;
 
     while (running)
     {
