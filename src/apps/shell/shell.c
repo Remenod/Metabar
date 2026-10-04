@@ -12,17 +12,19 @@
 
 #include "../atto/atto.h"
 
-#define LINE_MAX 128
+#define LINE_MAX 256
 #define PATH_MAX 256
-#define ARGS_MAX 8
-#define TREE_DEPTH_MAX 8  // every level of a recursive delete costs a directory entry on the stack
-#define GLOB_ARGS_MAX 32  // one pattern can stand for many names, so the expanded line is longer
-#define GLOB_POOL 2048    // and all of them together have to fit in here
+#define ARGS_MAX 32
+#define TREE_DEPTH_MAX 8 // every level of a recursive delete costs a directory entry on the stack
+#define GLOB_ARGS_MAX 64 // one pattern can stand for many names, so the expanded line is longer
+#define GLOB_POOL 4096   // and all of them together have to fit in here
 #define GLOB_DEPTH_MAX 8
 
 static char cwd[PATH_MAX] = "/";
 static char tree_path[PATH_MAX]; // rm -r walks with this one instead of a buffer per level
 static bool_t running;
+static bool_t stop_asked; // Esc during a command, which ends the line and any script running it
+static uint32_t run_depth;
 
 static void out_dec(uint32_t value, uint32_t width)
 {
@@ -886,7 +888,10 @@ static bool_t wait_until(uint64_t deadline)
     while (get_timer_ticks() < deadline)
     {
         if (get_keyboard_char() == KEY_ESC)
+        {
+            stop_asked = true; // so that a script stops here too, not just this one note
             return false;
+        }
 
         asm volatile("hlt");
     }
@@ -993,6 +998,111 @@ static void cmd_beep(uint32_t argc, char **argv)
         fail("beep", "a frequency outside 19..20000 Hz sounds as silence");
 }
 
+#define RUN_DEPTH_MAX 4 // a script that runs itself should run out of patience, not out of stack
+
+static void execute(char *line); // what the prompt does with a line, defined past the table
+
+static void run_line(char *line, bool_t echo)
+{
+    if (echo)
+    {
+        print("+ ");
+        print(line);
+        print_char('\n');
+    }
+
+    execute(line);
+
+    if (get_keyboard_char() == KEY_ESC)
+        stop_asked = true;
+}
+
+/* Reads a file and does with every line what the prompt would have done with it. Lines are put
+ * together out of the pieces the file is read in, so the file may be as long as it likes. */
+static void cmd_run(uint32_t argc, char **argv)
+{
+    char path[PATH_MAX];
+    char line[LINE_MAX];
+    char chunk[512];
+    fat32_entry_t entry;
+    bool_t echo = false;
+    bool_t too_long = false;
+    uint32_t length = 0;
+    uint32_t at = 0;
+
+    if (!mounted("run"))
+        return;
+
+    for (uint32_t i = 1; i < argc; i++)
+        if (strcmp(argv[i], "-v") == 0)
+            echo = true;
+
+    const char *name = operand(argc, argv, 0);
+
+    if (name == NULL)
+    {
+        fail("run", "needs a file");
+        return;
+    }
+
+    if (run_depth >= RUN_DEPTH_MAX)
+    {
+        fail("run", "scripts inside scripts inside scripts");
+        return;
+    }
+
+    make_path(path, name); // the argument lives where a nested run would write its own, so copy it
+
+    if (!fat32_stat(path, &entry) || entry.is_dir)
+    {
+        fail(path, "no such file");
+        return;
+    }
+
+    run_depth++;
+
+    while (at < entry.size && !stop_asked)
+    {
+        const uint32_t got = fat32_read_at(path, at, chunk, sizeof(chunk));
+
+        if (got == 0)
+            break;
+
+        at += got;
+
+        for (uint32_t i = 0; i < got && !stop_asked; i++)
+        {
+            if (chunk[i] != '\n' && chunk[i] != '\r')
+            {
+                if (length + 1 < LINE_MAX)
+                    line[length++] = chunk[i];
+                else
+                    too_long = true;
+
+                continue;
+            }
+
+            line[length] = '\0';
+            length = 0;
+            run_line(line, echo);
+        }
+    }
+
+    if (length != 0 && !stop_asked) // a last line with no newline behind it
+    {
+        line[length] = '\0';
+        run_line(line, echo);
+    }
+
+    run_depth--;
+
+    if (too_long)
+        fail(path, "a line was longer than the shell can hold");
+
+    if (stop_asked && run_depth == 0)
+        print("run: stopped\n");
+}
+
 static void cmd_atto(uint32_t argc, char **argv)
 {
     char path[PATH_MAX];
@@ -1024,6 +1134,7 @@ static const command_t commands[] = {
     {"pwd", cmd_pwd, "pwd                   where you are"},
     {"cat", cmd_cat, "cat <file>            show a file"},
     {"atto", cmd_atto, "atto <file>           edit a file"},
+    {"run", cmd_run, "run [-v] <file>       do a file line by line"},
     {"touch", cmd_touch, "touch <file>          make an empty file"},
     {"mkdir", cmd_mkdir, "mkdir <name>          make a directory"},
     {"rm", cmd_rm, "rm [-r] <path>        delete"},
@@ -1048,6 +1159,7 @@ static void cmd_help(uint32_t argc, char **argv)
     print("names with spaces go in quotes: cat \"Loader Notes.txt\"\n");
     print("* stands for any part of a name, ** for any run of directories: rm **/*.tmp\n");
     print("Tab finishes a word, Up and Down walk back through what was typed\n");
+    print("Esc stops whatever is running, and leaves the shell at an empty prompt\n");
     print("the line can be moved around in: arrows, Home and End, alt with an arrow,\n");
     print("Delete, and ctrl with Backspace or with W to take back a word\n\n");
 
@@ -1089,7 +1201,7 @@ static void history_add(const char *line)
 
 typedef struct
 {
-    char *text;       // always terminated, so that drawing it is one call
+    char *text; // always terminated, so that drawing it is one call
     uint32_t length;
     uint32_t cursor;  // between 0 and length: where the next character would land
     uint32_t origin;  // the cell the line starts in, just past the prompt
@@ -1417,10 +1529,38 @@ static uint32_t split(char *line, char **argv)
     return argc;
 }
 
+/* Everything that happens to a line, whether it was typed at the prompt or read out of a file. */
+static void execute(char *line)
+{
+    char *argv[ARGS_MAX];
+    uint32_t i = 0;
+
+    while (line[i] == ' ')
+        i++;
+
+    if (line[i] == '\0' || line[i] == '#') // an empty line, or one that only says something
+        return;
+
+    uint32_t argc = split(line + i, argv);
+
+    if (argc == 0)
+        return;
+
+    argc = expand_patterns(argc, argv); // from here on the arguments are the expanded ones
+
+    uint32_t found = 0;
+    while (found < COMMAND_COUNT && strcmp(commands[found].name, glob_argv[0]) != 0)
+        found++;
+
+    if (found == COMMAND_COUNT)
+        fail(glob_argv[0], "no such command, try help");
+    else
+        commands[found].run(argc, glob_argv);
+}
+
 void shell_main(void)
 {
     char line[LINE_MAX];
-    char *argv[ARGS_MAX];
 
     running = true;
     strcpy(cwd, "/");
@@ -1432,24 +1572,11 @@ void shell_main(void)
 
     while (running)
     {
+        stop_asked = false;
         print(cwd);
         print("> ");
 
         read_line(line);
-
-        uint32_t argc = split(line, argv);
-        if (argc == 0)
-            continue;
-
-        argc = expand_patterns(argc, argv); // from here on the arguments are the expanded ones
-
-        uint32_t i = 0;
-        while (i < COMMAND_COUNT && strcmp(commands[i].name, glob_argv[0]) != 0)
-            i++;
-
-        if (i == COMMAND_COUNT)
-            fail(glob_argv[0], "no such command, try help");
-        else
-            commands[i].run(argc, glob_argv);
+        execute(line);
     }
 }
