@@ -7,6 +7,8 @@
 #include <kernel/memory.h>
 #include <lib/string.h>
 
+#include "../atto/atto.h"
+
 #define LINE_MAX 128
 #define PATH_MAX 256
 #define ARGS_MAX 8
@@ -542,6 +544,23 @@ static void cmd_umount(uint32_t argc, char **argv)
     strcpy(cwd, "/");
 }
 
+static void cmd_atto(uint32_t argc, char **argv)
+{
+    char path[PATH_MAX];
+
+    if (!mounted("atto"))
+        return;
+
+    if (argc < 2)
+    {
+        fail("atto", "needs a file");
+        return;
+    }
+
+    make_path(path, argv[1]);
+    atto_main(path);
+}
+
 typedef struct
 {
     const char *name;
@@ -555,6 +574,7 @@ static const command_t commands[] = {
     {"cd", cmd_cd, "cd [path]             go to a directory"},
     {"pwd", cmd_pwd, "pwd                   where you are"},
     {"cat", cmd_cat, "cat <file>            show a file"},
+    {"atto", cmd_atto, "atto <file>           edit a file"},
     {"touch", cmd_touch, "touch <file>          make an empty file"},
     {"mkdir", cmd_mkdir, "mkdir <name>          make a directory"},
     {"rm", cmd_rm, "rm [-r] <path>        delete"},
