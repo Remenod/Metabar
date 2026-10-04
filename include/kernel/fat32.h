@@ -21,9 +21,12 @@ typedef struct
     uint32_t index;   // 32-byte entry inside that sector
 } fat32_dir_t;
 
-/* Looks for a FAT32 volume on the registered block device: first the device itself, then every
- * FAT32 partition its MBR lists. Returns false if neither holds one. */
+/* Looks for a FAT32 volume on a block device: first the device itself, then every FAT32 partition
+ * its MBR lists. fat32_mount takes the first registered device that holds one. */
 bool_t fat32_mount(void);
+bool_t fat32_mount_device(const block_device_t *device);
+void fat32_unmount(void);
+
 bool_t fat32_mounted(void);
 
 // paths are absolute, '/' separated, and compared without regard to case: "/dir/file.txt"

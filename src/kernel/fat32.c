@@ -219,13 +219,8 @@ static bool_t read_bpb(uint32_t lba)
     return true;
 }
 
-bool_t fat32_mount(void)
+static bool_t probe(void)
 {
-    fs.mounted = false;
-
-    if (block_device() == NULL)
-        return false;
-
     if (read_bpb(0)) // a bare volume, like an image written by mkfs.vfat
         return true;
 
@@ -249,6 +244,41 @@ bool_t fat32_mount(void)
             return false;
         dir_cached = false;
     }
+
+    return false;
+}
+
+void fat32_unmount(void)
+{
+    fs.mounted = false;
+    fat_cached = false;
+    dir_cached = false;
+    block_select(NULL);
+}
+
+bool_t fat32_mount_device(const block_device_t *device)
+{
+    fat32_unmount();
+
+    if (device == NULL)
+        return false;
+
+    block_select(device);
+
+    if (!probe())
+    {
+        fat32_unmount();
+        return false;
+    }
+
+    return true;
+}
+
+bool_t fat32_mount(void)
+{
+    for (uint32_t i = 0; i < block_count(); i++)
+        if (fat32_mount_device(block_at(i)))
+            return true;
 
     return false;
 }
