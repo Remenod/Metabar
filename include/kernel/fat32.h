@@ -34,3 +34,13 @@ bool_t fat32_stat(const char *path, fat32_entry_t *entry);
 
 // copies at most max_bytes from the start of the file; returns how many bytes were copied
 uint32_t fat32_read_file(const char *path, void *buf, uint32_t max_bytes);
+
+/* Writes a whole file at once: creates it when it is not there and replaces what it held when it
+ * is. Returns how many bytes landed on the volume, which is either `size` or nothing at all. */
+uint32_t fat32_write_file(const char *path, const void *buf, uint32_t size);
+
+// creates one directory; every directory above it has to exist already
+bool_t fat32_mkdir(const char *path);
+
+// removes a file or an empty directory
+bool_t fat32_remove(const char *path);
