@@ -8,6 +8,10 @@
 
 #define KBD_DATA_PORT 0x60
 
+#define SCAN_CTRL 0x1D
+#define SCAN_ALT 0x38
+#define SCAN_RELEASED 0x80
+
 static const char scancode_ascii_shiftnt[128] = {
     0, 27, '1', '2', '3', '4', '5', '6',
     '7', '8', '9', '0', '-', '=', '\b', '\t',
@@ -36,6 +40,8 @@ static const char *scancode_ascii = scancode_ascii_shiftnt;
 
 static volatile char last_char = 0;
 static volatile bool_t extended = 0;
+static volatile bool_t ctrl = 0;
+static volatile bool_t alt = 0;
 
 void keyboard_handler(const cpu_state_t *state)
 {
@@ -46,6 +52,18 @@ void keyboard_handler(const cpu_state_t *state)
         scancode_ascii = scancode_ascii_shift;
     if (scancode == 0xAA || scancode == 0xB6)
         scancode_ascii = scancode_ascii_shiftnt;
+
+    /* Ctrl and Alt are never a key of their own, only something held while another one is pressed,
+     * so they are kept as state. Both sides of the keyboard send the same code, the right hand one
+     * behind an 0xE0 that the lines below pass over. */
+    if (scancode == SCAN_CTRL)
+        ctrl = true;
+    if (scancode == (SCAN_CTRL | SCAN_RELEASED))
+        ctrl = false;
+    if (scancode == SCAN_ALT)
+        alt = true;
+    if (scancode == (SCAN_ALT | SCAN_RELEASED))
+        alt = false;
 
     if (scancode == 0xE0)
     {
@@ -70,10 +88,19 @@ void keyboard_handler(const cpu_state_t *state)
             last_char = KEY_DOWN;
             break;
         case 0x4B:
-            last_char = KEY_LEFT;
+            last_char = alt ? KEY_HOME : KEY_LEFT; // alt with an arrow goes where home and end go
             break;
         case 0x4D:
-            last_char = KEY_RIGHT;
+            last_char = alt ? KEY_END : KEY_RIGHT;
+            break;
+        case 0x47:
+            last_char = KEY_HOME;
+            break;
+        case 0x4F:
+            last_char = KEY_END;
+            break;
+        case 0x53:
+            last_char = KEY_DELETE;
             break;
         }
         extended = false;
@@ -83,6 +110,10 @@ void keyboard_handler(const cpu_state_t *state)
     if (scancode < sizeof(scancode_ascii_shiftnt))
     {
         char c = scancode_ascii[scancode];
+
+        if (ctrl && (c == '\b' || c == 'w' || c == 'W'))
+            c = KEY_ERASE_WORD;
+
         if (c)
             last_char = c;
     }
