@@ -43,6 +43,10 @@ SECTIONS
         *(COMMON)
     }
 
+    /* physical bounds of .bss, zeroed by the bootstrap code before paging is enabled */
+    __phys_bss_start = __phys_after_bootstrap_data + SIZEOF(.text) + SIZEOF(.rodata) + SIZEOF(.data);
+    __phys_bss_end = __phys_bss_start + SIZEOF(.bss);
+
     __phys_after_kernel = ALIGN(__phys_after_bootstrap_data + SIZEOF(.text) + SIZEOF(.rodata) + SIZEOF(.data) + SIZEOF(.bss) , 0x1000);
 
     /* boot.asm loads the image to low memory; image and .bss must stay below the EBDA and VGA memory */

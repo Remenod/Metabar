@@ -8,6 +8,7 @@
 #include <paging/paging.h>
 #include <a20.h>
 #include <kernel/ramdisk.h>
+#include <kernel/fat32.h>
 #include <kernel/diagnostics/warning_routine.h>
 #include <kernel/settings.h>
 #include <kernel/memory.h>
@@ -54,6 +55,12 @@ void kernel_main()
     }
     else
         print("Failed\n");
+
+    print("Mounting FAT32... ");
+    if (fat32_mount())
+        print(done_text);
+    else
+        print("no volume\n");
 
     print("Setting Initialization... ");
     settings_init();
