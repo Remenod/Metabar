@@ -2,6 +2,7 @@
 
 #include <drivers/screen.h>
 #include <drivers/keyboard.h>
+#include <drivers/speaker.h>
 #include <kernel/block.h>
 #include <kernel/fat32.h>
 #include <kernel/memory.h>
@@ -823,6 +824,45 @@ static void cmd_umount(uint32_t argc, char **argv)
     strcpy(cwd, "/");
 }
 
+#define BEEP_DEFAULT_HZ 880
+#define BEEP_DEFAULT_MS 200
+#define BEEP_LONGEST_MS 5000 // a mistyped number should not hold the machine for a quarter of an hour
+
+static uint32_t to_number(const char *text, uint32_t fallback)
+{
+    uint32_t value = 0;
+
+    if (text == NULL || text[0] == '\0')
+        return fallback;
+
+    for (uint32_t i = 0; text[i] != '\0'; i++)
+    {
+        if (text[i] < '0' || text[i] > '9')
+            return fallback;
+
+        value = value * 10 + (uint32_t)(text[i] - '0');
+    }
+
+    return value;
+}
+
+static void cmd_beep(uint32_t argc, char **argv)
+{
+    const uint32_t hz = to_number(operand(argc, argv, 0), BEEP_DEFAULT_HZ);
+    uint32_t ms = to_number(operand(argc, argv, 1), BEEP_DEFAULT_MS);
+
+    if (hz < SPEAKER_MIN_HZ || hz > SPEAKER_MAX_HZ)
+    {
+        fail("beep", "that is not a frequency the speaker can reach");
+        return;
+    }
+
+    if (ms > BEEP_LONGEST_MS)
+        ms = BEEP_LONGEST_MS;
+
+    beep(hz, ms);
+}
+
 static void cmd_atto(uint32_t argc, char **argv)
 {
     char path[PATH_MAX];
@@ -863,6 +903,7 @@ static const command_t commands[] = {
     {"lsblk", cmd_lsblk, "lsblk                 block devices"},
     {"mount", cmd_mount, "mount [device]        mount one of them"},
     {"umount", cmd_umount, "umount                let go of it"},
+    {"beep", cmd_beep, "beep [hz] [ms]        make a sound"},
     {"clear", cmd_clear, "clear                 wipe the screen"},
     {"exit", cmd_exit, "exit                  back to the selector"},
 };
