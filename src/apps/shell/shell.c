@@ -10,28 +10,11 @@
 #define LINE_MAX 128
 #define PATH_MAX 256
 #define ARGS_MAX 8
-#define SCREEN_CELLS (80 * 25)
 #define TREE_DEPTH_MAX 8 // every level of a recursive delete costs a directory entry on the stack
 
 static char cwd[PATH_MAX] = "/";
 static char tree_path[PATH_MAX]; // rm -r walks with this one instead of a buffer per level
 static bool_t running;
-
-/* The screen driver prints where the cursor is and drops whatever runs past the last line, so
- * anything that scrolls has to say so itself. */
-static void out_char(char c)
-{
-    print_char(c);
-
-    while (get_vga_cursor_pos() >= SCREEN_CELLS)
-        scroll_down();
-}
-
-static void out(const char *text)
-{
-    for (uint32_t i = 0; text[i] != '\0'; i++)
-        out_char(text[i]);
-}
 
 static void out_dec(uint32_t value, uint32_t width)
 {
@@ -40,17 +23,17 @@ static void out_dec(uint32_t value, uint32_t width)
     uint_to_str(value, buf);
 
     for (uint32_t i = strlen(buf); i < width; i++)
-        out_char(' ');
+        print_char(' ');
 
-    out(buf);
+    print(buf);
 }
 
 static void fail(const char *what, const char *why)
 {
-    out(what);
-    out(": ");
-    out(why);
-    out_char('\n');
+    print(what);
+    print(": ");
+    print(why);
+    print_char('\n');
 }
 
 static bool_t mounted(const char *what)
@@ -148,8 +131,8 @@ static void cmd_pwd(uint32_t argc, char **argv)
 {
     (void)argc;
     (void)argv;
-    out(cwd);
-    out_char('\n');
+    print(cwd);
+    print_char('\n');
 }
 
 static void cmd_ls(uint32_t argc, char **argv)
@@ -189,27 +172,27 @@ static void cmd_ls(uint32_t argc, char **argv)
 
         if (entry.is_dir)
         {
-            out("     <DIR>  ");
+            print("     <DIR>  ");
             dirs++;
         }
         else
         {
             out_dec(entry.size, 10);
-            out("  ");
+            print("  ");
             files++;
             bytes += entry.size;
         }
 
-        out(entry.name);
-        out_char('\n');
+        print(entry.name);
+        print_char('\n');
     }
 
     out_dec(files, 0);
-    out(" files, ");
+    print(" files, ");
     out_dec(dirs, 0);
-    out(" directories, ");
+    print(" directories, ");
     out_dec(bytes, 0);
-    out(" bytes\n");
+    print(" bytes\n");
 }
 
 static void cmd_cd(uint32_t argc, char **argv)
@@ -264,13 +247,13 @@ static void cmd_cat(uint32_t argc, char **argv)
             break;
 
         for (uint32_t i = 0; i < got; i++)
-            out_char(buf[i]);
+            print_char(buf[i]);
 
         done += got;
     }
 
     if (done != 0 && buf[(done - 1) % sizeof(buf)] != '\n')
-        out_char('\n');
+        print_char('\n');
 }
 
 static void cmd_touch(uint32_t argc, char **argv)
@@ -474,17 +457,17 @@ static void cmd_df(uint32_t argc, char **argv)
     const uint32_t total = fat32_total_clusters();
     const uint32_t free_clusters = fat32_free_clusters();
 
-    out("volume on ");
-    out(fat32_device()->name);
-    out("\n");
+    print("volume on ");
+    print(fat32_device()->name);
+    print("\n");
     out_dec(to_kib(total, size), 10);
-    out(" KiB total\n");
+    print(" KiB total\n");
     out_dec(to_kib(total - free_clusters, size), 10);
-    out(" KiB used\n");
+    print(" KiB used\n");
     out_dec(to_kib(free_clusters, size), 10);
-    out(" KiB free, in clusters of ");
+    print(" KiB free, in clusters of ");
     out_dec(size, 0);
-    out(" bytes\n");
+    print(" bytes\n");
 }
 
 static void cmd_lsblk(uint32_t argc, char **argv)
@@ -492,25 +475,25 @@ static void cmd_lsblk(uint32_t argc, char **argv)
     (void)argc;
     (void)argv;
 
-    out("NAME         SECTORS    KiB  MOUNTED\n");
+    print("NAME         SECTORS    KiB  MOUNTED\n");
 
     for (uint32_t i = 0; i < block_count(); i++)
     {
         const block_device_t *device = block_at(i);
 
-        out(device->name);
+        print(device->name);
         for (uint32_t pad = strlen(device->name); pad < 12; pad++)
-            out_char(' ');
+            print_char(' ');
 
         out_dec(device->sectors, 8);
         out_dec(device->sectors / 2, 7);
-        out("  ");
-        out(device == fat32_device() ? "yes" : "no");
-        out(device->write == NULL ? "  (read only)\n" : "\n");
+        print("  ");
+        print(device == fat32_device() ? "yes" : "no");
+        print(device->write == NULL ? "  (read only)\n" : "\n");
     }
 
     if (block_count() == 0)
-        out("no block devices\n");
+        print("no block devices\n");
 }
 
 static void cmd_mount(uint32_t argc, char **argv)
@@ -518,11 +501,11 @@ static void cmd_mount(uint32_t argc, char **argv)
     if (argc < 2)
     {
         if (fat32_device() == NULL)
-            out("nothing is mounted\n");
+            print("nothing is mounted\n");
         else
         {
-            out(fat32_device()->name);
-            out(" on /\n");
+            print(fat32_device()->name);
+            print(" on /\n");
         }
         return;
     }
@@ -592,13 +575,13 @@ static void cmd_help(uint32_t argc, char **argv)
     (void)argc;
     (void)argv;
 
-    out("names with spaces go in quotes: cat \"Loader Notes.txt\"\n\n");
+    print("names with spaces go in quotes: cat \"Loader Notes.txt\"\n\n");
 
     for (uint32_t i = 0; i < COMMAND_COUNT; i++)
     {
-        out("  ");
-        out(commands[i].usage);
-        out_char('\n');
+        print("  ");
+        print(commands[i].usage);
+        print_char('\n');
     }
 }
 
@@ -621,7 +604,7 @@ static void read_line(char *line)
 
         if (c == '\n')
         {
-            out_char('\n');
+            print_char('\n');
             line[length] = '\0';
             return;
         }
@@ -631,7 +614,7 @@ static void read_line(char *line)
             if (length > 0)
             {
                 length--;
-                out_char('\b');
+                print_char('\b');
             }
             continue;
         }
@@ -639,7 +622,7 @@ static void read_line(char *line)
         if (c >= ' ' && length + 1 < LINE_MAX)
         {
             line[length++] = c;
-            out_char(c);
+            print_char(c);
         }
     }
 }
@@ -688,12 +671,12 @@ void shell_main(void)
 
     set_vga_cursor_visibility(true);
     clear_screen();
-    out("Metabar shell. help lists what it knows, Esc leaves.\n\n");
+    print("Metabar shell. help lists what it knows, Esc leaves.\n\n");
 
     while (running)
     {
-        out(cwd);
-        out("> ");
+        print(cwd);
+        print("> ");
 
         read_line(line);
 
