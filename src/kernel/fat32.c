@@ -10,7 +10,7 @@
 #define ATTR_VOLUME_ID 0x08
 #define ATTR_DIRECTORY 0x10
 #define ATTR_ARCHIVE 0x20 // "changed since the last backup", what a plain new file gets
-#define ATTR_LFN 0x0F // read-only + hidden + system + volume id at once: never a real file
+#define ATTR_LFN 0x0F     // read-only + hidden + system + volume id at once: never a real file
 
 #define ENTRY_FREE 0xE5 // deleted entry, keep looking
 #define ENTRY_END 0x00  // nothing was ever written past here
@@ -37,16 +37,16 @@
 static struct
 {
     bool_t mounted;
-    uint32_t fat_lba;             // first sector of the first FAT
-    uint32_t data_lba;            // sector where cluster 2 starts
+    uint32_t fat_lba;  // first sector of the first FAT
+    uint32_t data_lba; // sector where cluster 2 starts
     uint32_t sectors_per_cluster;
     uint32_t root_cluster;
     uint32_t cluster_count;
     uint32_t fat_count;  // every copy of the FAT has to be written, not just the first
     uint32_t fat_size;   // sectors in one of them
-    uint32_t fsinfo_lba;  // 0 when the volume has no FSInfo sector
-    uint32_t next_free;   // where the search for a free cluster starts
-    uint32_t free_count;  // clusters still free, kept so the volume can be left with a true one
+    uint32_t fsinfo_lba; // 0 when the volume has no FSInfo sector
+    uint32_t next_free;  // where the search for a free cluster starts
+    uint32_t free_count; // clusters still free, kept so the volume can be left with a true one
 } fs;
 
 // one cached sector of the FAT and one of whatever directory is being walked
