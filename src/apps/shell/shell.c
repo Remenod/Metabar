@@ -1104,7 +1104,7 @@ static void cmd_run(uint32_t argc, char **argv)
         print("run: stopped\n");
 }
 
-#define SAVER_MUSIC "/MUSIC/minecraft/aria_math.sh"
+#define SAVER_MUSIC "/MUSIC/minecraft/minecraft.sh"
 
 static void cmd_saver(uint32_t argc, char **argv)
 {
