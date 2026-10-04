@@ -307,6 +307,32 @@ static uint32_t expand_patterns(uint32_t argc, char **argv)
 
 /* --- commands ------------------------------------------------------------------------------- */
 
+static bool_t is_flag(const char *argument)
+{
+    return argument[0] == '-' && argument[1] != '\0';
+}
+
+static uint32_t operand_count(uint32_t argc, char **argv)
+{
+    uint32_t count = 0;
+
+    for (uint32_t i = 1; i < argc; i++)
+        if (!is_flag(argv[i]))
+            count++;
+
+    return count;
+}
+
+// the n-th name on the line, flags left out of the count, or NULL when the line is shorter
+static const char *operand(uint32_t argc, char **argv, uint32_t index)
+{
+    for (uint32_t i = 1; i < argc; i++)
+        if (!is_flag(argv[i]) && index-- == 0)
+            return argv[i];
+
+    return NULL;
+}
+
 static void cmd_help(uint32_t argc, char **argv);
 
 static void cmd_clear(uint32_t argc, char **argv)
@@ -331,29 +357,13 @@ static void cmd_pwd(uint32_t argc, char **argv)
     print_char('\n');
 }
 
-static void cmd_ls(uint32_t argc, char **argv)
+static void list_directory(const char *path, bool_t all)
 {
-    char path[PATH_MAX];
     fat32_entry_t entry;
     fat32_dir_t dir;
-    const char *where = ".";
-    bool_t all = false;
     uint32_t files = 0;
     uint32_t dirs = 0;
     uint32_t bytes = 0;
-
-    if (!mounted("ls"))
-        return;
-
-    for (uint32_t i = 1; i < argc; i++)
-    {
-        if (strcmp(argv[i], "-a") == 0)
-            all = true;
-        else
-            where = argv[i];
-    }
-
-    make_path(path, where);
 
     if (!fat32_open_dir(path, &dir))
     {
@@ -391,6 +401,60 @@ static void cmd_ls(uint32_t argc, char **argv)
     print(" bytes\n");
 }
 
+static void cmd_ls(uint32_t argc, char **argv)
+{
+    char path[PATH_MAX];
+    fat32_entry_t entry;
+    bool_t all = false;
+
+    if (!mounted("ls"))
+        return;
+
+    for (uint32_t i = 1; i < argc; i++)
+        if (strcmp(argv[i], "-a") == 0)
+            all = true;
+
+    const uint32_t names = operand_count(argc, argv);
+
+    if (names == 0)
+    {
+        make_path(path, ".");
+        list_directory(path, all);
+        return;
+    }
+
+    for (uint32_t i = 1; i < argc; i++)
+    {
+        if (is_flag(argv[i]))
+            continue;
+
+        make_path(path, argv[i]);
+
+        if (!fat32_stat(path, &entry))
+        {
+            fail(argv[i], "no such name");
+            continue;
+        }
+
+        if (!entry.is_dir) // a name that is a file stands for itself, the way a pattern leaves it
+        {
+            out_dec(entry.size, 10);
+            print("  ");
+            print(argv[i]);
+            print_char('\n');
+            continue;
+        }
+
+        if (names > 1) // say which directory the lines below belong to
+        {
+            print(argv[i]);
+            print(":\n");
+        }
+
+        list_directory(path, all);
+    }
+}
+
 static void cmd_cd(uint32_t argc, char **argv)
 {
     char path[PATH_MAX];
@@ -410,27 +474,18 @@ static void cmd_cd(uint32_t argc, char **argv)
     strcpy(cwd, path);
 }
 
-static void cmd_cat(uint32_t argc, char **argv)
+static void cat_one(const char *name)
 {
     char path[PATH_MAX];
     char buf[512];
     fat32_entry_t entry;
     uint32_t done = 0;
 
-    if (!mounted("cat"))
-        return;
-
-    if (argc < 2)
-    {
-        fail("cat", "needs a file");
-        return;
-    }
-
-    make_path(path, argv[1]);
+    make_path(path, name);
 
     if (!fat32_stat(path, &entry) || entry.is_dir)
     {
-        fail("cat", "no such file");
+        fail(name, "no such file");
         return;
     }
 
@@ -452,6 +507,22 @@ static void cmd_cat(uint32_t argc, char **argv)
         print_char('\n');
 }
 
+static void cmd_cat(uint32_t argc, char **argv)
+{
+    if (!mounted("cat"))
+        return;
+
+    if (operand_count(argc, argv) == 0)
+    {
+        fail("cat", "needs a file");
+        return;
+    }
+
+    for (uint32_t i = 1; i < argc; i++)
+        if (!is_flag(argv[i]))
+            cat_one(argv[i]);
+}
+
 static void cmd_touch(uint32_t argc, char **argv)
 {
     char path[PATH_MAX];
@@ -460,19 +531,25 @@ static void cmd_touch(uint32_t argc, char **argv)
     if (!mounted("touch"))
         return;
 
-    if (argc < 2)
+    if (operand_count(argc, argv) == 0)
     {
         fail("touch", "needs a name");
         return;
     }
 
-    make_path(path, argv[1]);
+    for (uint32_t i = 1; i < argc; i++)
+    {
+        if (is_flag(argv[i]))
+            continue;
 
-    if (fat32_stat(path, &entry))
-        return; // it is already there, and there is no clock to bring its date forward
+        make_path(path, argv[i]);
 
-    if (fat32_write_file(path, NULL, 0) != 0 || !fat32_stat(path, &entry))
-        fail("touch", "could not create it");
+        if (fat32_stat(path, &entry))
+            continue; // it is already there, and there is no clock to bring its date forward
+
+        if (fat32_write_file(path, NULL, 0) != 0 || !fat32_stat(path, &entry))
+            fail(argv[i], "could not create it");
+    }
 }
 
 static void cmd_mkdir(uint32_t argc, char **argv)
@@ -482,16 +559,22 @@ static void cmd_mkdir(uint32_t argc, char **argv)
     if (!mounted("mkdir"))
         return;
 
-    if (argc < 2)
+    if (operand_count(argc, argv) == 0)
     {
         fail("mkdir", "needs a name");
         return;
     }
 
-    make_path(path, argv[1]);
+    for (uint32_t i = 1; i < argc; i++)
+    {
+        if (is_flag(argv[i]))
+            continue;
 
-    if (!fat32_mkdir(path))
-        fail("mkdir", "could not create it");
+        make_path(path, argv[i]);
+
+        if (!fat32_mkdir(path))
+            fail(argv[i], "could not create it");
+    }
 }
 
 // walks what tree_path names, deleting from the bottom up
@@ -536,43 +619,44 @@ static void cmd_rm(uint32_t argc, char **argv)
 {
     char path[PATH_MAX];
     bool_t recursive = false;
-    const char *what = NULL;
 
     if (!mounted("rm"))
         return;
 
     for (uint32_t i = 1; i < argc; i++)
-    {
         if (strcmp(argv[i], "-r") == 0)
             recursive = true;
-        else
-            what = argv[i];
-    }
 
-    if (what == NULL)
+    if (operand_count(argc, argv) == 0)
     {
         fail("rm", "needs a name");
         return;
     }
 
-    make_path(path, what);
-
-    if (strcmp(path, "/") == 0)
+    for (uint32_t i = 1; i < argc; i++)
     {
-        fail("rm", "not the root");
-        return;
-    }
+        if (is_flag(argv[i]))
+            continue;
 
-    if (recursive)
-    {
-        strcpy(tree_path, path);
-        if (!remove_tree(0))
-            fail("rm", "could not delete all of it");
-        return;
-    }
+        make_path(path, argv[i]);
 
-    if (!fat32_remove(path))
-        fail("rm", "could not delete it, a directory has to be empty or given -r");
+        if (strcmp(path, "/") == 0)
+        {
+            fail("rm", "not the root");
+            continue;
+        }
+
+        if (recursive)
+        {
+            strcpy(tree_path, path);
+            if (!remove_tree(0))
+                fail(argv[i], "could not delete all of it");
+            continue;
+        }
+
+        if (!fat32_remove(path))
+            fail(argv[i], "could not delete it, a directory has to be empty or given -r");
+    }
 }
 
 static void cmd_mv(uint32_t argc, char **argv)
@@ -583,14 +667,14 @@ static void cmd_mv(uint32_t argc, char **argv)
     if (!mounted("mv"))
         return;
 
-    if (argc < 3)
+    if (operand_count(argc, argv) != 2)
     {
-        fail("mv", "needs what to move and where");
+        fail("mv", "takes exactly two names");
         return;
     }
 
-    make_path(from, argv[1]);
-    make_path(to, argv[2]);
+    make_path(from, operand(argc, argv, 0));
+    make_path(to, operand(argc, argv, 1));
 
     if (!fat32_rename(from, to))
         fail("mv", "could not move it");
@@ -605,14 +689,14 @@ static void cmd_cp(uint32_t argc, char **argv)
     if (!mounted("cp"))
         return;
 
-    if (argc < 3)
+    if (operand_count(argc, argv) != 2)
     {
-        fail("cp", "needs what to copy and where");
+        fail("cp", "takes exactly two names");
         return;
     }
 
-    make_path(from, argv[1]);
-    make_path(to, argv[2]);
+    make_path(from, operand(argc, argv, 0));
+    make_path(to, operand(argc, argv, 1));
 
     if (!fat32_stat(from, &entry) || entry.is_dir)
     {
