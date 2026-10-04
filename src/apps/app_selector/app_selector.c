@@ -44,12 +44,12 @@ static App apps[] = {
 #define APP_COUNT (uint8_t)(sizeof(apps) / sizeof(App))
 #define PAGE_COUNT (uint8_t)((APP_COUNT + ITEMS_PER_PAGE - 1) / ITEMS_PER_PAGE)
 
-static uint8_t slots[ITEMS_PER_PAGE];  // one per row on screen, holding the app it stands for
+static uint8_t slots[ITEMS_PER_PAGE]; // one per row on screen, holding the app it stands for
 static uint8_t page = 0;
-static volatile uint8_t selected = 0;  // the mouse handler writes both of these from an interrupt
+static volatile uint8_t selected = 0; // the mouse handler writes both of these from an interrupt
 static volatile bool_t launch = false;
-static uint16_t pointer_x = 0;         // where the pointer was last seen, so that a pointer which
-static uint16_t pointer_y = 0;         // merely rests somewhere does not fight the arrow keys
+static uint16_t pointer_x = 0; // where the pointer was last seen, so that a pointer which
+static uint16_t pointer_y = 0; // merely rests somewhere does not fight the arrow keys
 
 static uint8_t page_base(void)
 {
