@@ -23,6 +23,8 @@
 #define HINT_ROW 21
 #define ITEM_LEFT 20
 #define ITEM_WIDTH 40
+#define BUTTON_WIDTH 5 // the width of "[ < ]"
+#define BUTTON_GAP 3
 
 #define ITEMS_PER_PAGE (uint8_t)((LAST_ROW - FIRST_ROW) / ROW_STEP + 1)
 
@@ -48,8 +50,11 @@ static uint8_t slots[ITEMS_PER_PAGE]; // one per row on screen, holding the app 
 static uint8_t page = 0;
 static volatile uint8_t selected = 0; // the mouse handler writes both of these from an interrupt
 static volatile bool_t launch = false;
-static uint16_t pointer_x = 0; // where the pointer was last seen, so that a pointer which
-static uint16_t pointer_y = 0; // merely rests somewhere does not fight the arrow keys
+static uint16_t pointer_x = 0;           // where the pointer was last seen, so that a pointer which
+static uint16_t pointer_y = 0;           // merely rests somewhere does not fight the arrow keys
+static uint8_t buttons[2] = {0, 1};      // ctx of the two page buttons, which is how they tell each other apart
+static uint16_t button_col[2];           // where they ended up, which depends on how wide the page line is
+static volatile int8_t page_request = 0; // set by a click on one of them, acted on by the loop
 
 static uint8_t page_base(void)
 {
@@ -138,6 +143,34 @@ static void item_click(uint16_t x, uint16_t y, void *ctx)
     launch = true;
 }
 
+static bool_t page_button_bound(uint16_t x, uint16_t y, void *ctx)
+{
+    const uint8_t which = *(const uint8_t *)ctx;
+
+    return x >= button_col[which] * GLYPH_WIDTH && x < (button_col[which] + BUTTON_WIDTH) * GLYPH_WIDTH &&
+           y >= PAGE_ROW * GLYPH_HEIGHT && y < (PAGE_ROW + 1) * GLYPH_HEIGHT;
+}
+
+static void page_button_click(uint16_t x, uint16_t y, void *ctx)
+{
+    (void)x;
+    (void)y;
+
+    // turning a page redraws the screen, which is no work for an interrupt: the loop takes it from here
+    page_request = *(const uint8_t *)ctx == 0 ? -1 : 1;
+}
+
+// a button that leads nowhere is dimmed rather than taken away, so that the line keeps its shape
+static void draw_page_button(uint8_t which, bool_t usable)
+{
+    const uint16_t at = (uint16_t)(PAGE_ROW * SCREEN_WIDTH + button_col[which]);
+
+    put_string(at, which == 0 ? "[ < ]" : "[ > ]");
+
+    for (uint16_t i = 0; i < BUTTON_WIDTH; i++)
+        set_fg_color(at + i, usable ? WHITE : DARK_GREY);
+}
+
 static void draw_page(void)
 {
     char number[12];
@@ -173,9 +206,27 @@ static void draw_page(void)
         strcat(line, " of ");
         uint_to_str(PAGE_COUNT, number);
         strcat(line, number);
-        strcat(line, ", turned with [ and ]");
 
-        put_centered(PAGE_ROW, line);
+        const uint32_t width = BUTTON_WIDTH + BUTTON_GAP + strlen(line) + BUTTON_GAP + BUTTON_WIDTH;
+        const uint16_t left = (uint16_t)((SCREEN_WIDTH - width) / 2);
+
+        button_col[0] = left;
+        button_col[1] = (uint16_t)(left + width - BUTTON_WIDTH);
+
+        put_string((uint16_t)(PAGE_ROW * SCREEN_WIDTH + left + BUTTON_WIDTH + BUTTON_GAP), line);
+        draw_page_button(0, page > 0);
+        draw_page_button(1, page + 1 < PAGE_COUNT);
+
+        for (uint8_t which = 0; which < 2; which++)
+            register_ui_element((uint8_t)(ITEMS_PER_PAGE + which),
+                                (mouse_ui_element_t){
+                                    .ctx = &buttons[which],
+                                    .handlers_on_release_flags = 0b001,
+                                    .bound = page_button_bound,
+                                    .mouse1_handler = page_button_click,
+                                    .mouse2_handler = (ui_handler_func_t)NULL,
+                                    .mouse3_handler = (ui_handler_func_t)NULL,
+                                });
     }
 
     put_centered(HINT_ROW, "Up and Down choose, Enter runs it, or click one");
@@ -248,6 +299,15 @@ void app_selector()
 
         while (!launch)
         {
+            if (page_request != 0)
+            {
+                const bool_t forward = page_request > 0;
+
+                page_request = 0;
+                turn_page(forward);
+                continue;
+            }
+
             const char key = get_keyboard_char();
 
             if (key == 0)
