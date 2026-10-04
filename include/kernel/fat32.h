@@ -48,6 +48,7 @@ bool_t fat32_mkdir(const char *path);
 // removes a file or an empty directory
 bool_t fat32_remove(const char *path);
 
-/* Gives an entry another name, another directory, or both, without touching what it holds. Refuses
- * a name that is already taken, and a directory that would end up inside itself. */
+/* Gives an entry another name, another directory, or both, without touching what it holds. What
+ * stands under the new name is replaced: a file by a file, an empty directory by a directory.
+ * Refuses a directory that would end up inside itself. */
 bool_t fat32_rename(const char *from, const char *to);

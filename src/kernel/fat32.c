@@ -1279,20 +1279,35 @@ bool_t fat32_rename(const char *from, const char *to)
     const fat32_dir_t first = found_first; // both only mean anything right after the search above
     const fat32_dir_t last = found_short;
 
-    /* A name that is taken belongs to whoever has it, and it is for the caller to decide what to
-     * do about that. The one exception is the entry being renamed itself, which is how a name gets
-     * its upper and lower case changed: the search ignores case, so it answers with that entry. */
-    if (find_in_directory(to_dir, to_name, strlen(to_name), &target) &&
-        !(found_short.cluster == last.cluster && found_short.sector == last.sector &&
-          found_short.index == last.index))
-        return false;
+    bool_t replacing = find_in_directory(to_dir, to_name, strlen(to_name), &target);
+    const fat32_dir_t target_first = found_first;
+    const fat32_dir_t target_last = found_short;
+
+    if (replacing && target_last.cluster == last.cluster && target_last.sector == last.sector &&
+        target_last.index == last.index)
+        replacing = false;
+
+    if (replacing)
+    {
+        // what takes the place of what still has to make sense
+        if (target.is_dir != entry.is_dir)
+            return false;
+
+        if (target.is_dir && !directory_is_empty(target.first_cluster))
+            return false;
+    }
 
     if (entry.is_dir && !outside_subtree(to_dir, entry.first_cluster))
         return false;
 
-    /* Only the records that name the contents move; the contents stay where they are, which is why
-     * this costs the same for a byte and for a gigabyte. The new name is written before the old one
-     * goes, so that a failure in between leaves the entry reachable rather than lost. */
+    if (replacing)
+    {
+        if (!free_records(target_first, target_last))
+            return false;
+
+        free_chain(target.first_cluster);
+    }
+
     if (!create_entry(to_dir, to_name, entry.is_dir ? ATTR_DIRECTORY : ATTR_ARCHIVE, entry.first_cluster,
                       entry.size))
         return false;
