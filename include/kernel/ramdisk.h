@@ -22,3 +22,6 @@ bool_t ramdisk_map(void);
 
 // copies `count` sectors starting at `lba`; false if the range is outside the ramdisk
 bool_t ramdisk_read(uint32_t lba, uint32_t count, void *buf);
+
+// copies them the other way; the ramdisk is RAM, so what is written is lost at the next boot
+bool_t ramdisk_write(uint32_t lba, uint32_t count, const void *buf);

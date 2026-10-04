@@ -5,7 +5,7 @@
 #include <lib/mem.h>
 
 // filled in once the window is mapped, then handed to the block layer
-static block_device_t device = {"ramdisk", 0, ramdisk_read};
+static block_device_t device = {"ramdisk", 0, ramdisk_read, ramdisk_write};
 
 static uint32_t phys_base = 0;
 static uint32_t byte_size = 0;
@@ -68,15 +68,27 @@ bool_t ramdisk_map(void)
     return mapped;
 }
 
+static bool_t range_ok(uint32_t lba, uint32_t count)
+{
+    return mapped && count != 0 && lba < ramdisk_sectors() && count <= ramdisk_sectors() - lba;
+}
+
 bool_t ramdisk_read(uint32_t lba, uint32_t count, void *buf)
 {
-    if (!mapped || buf == NULL || count == 0)
-        return false;
-
-    if (lba > ramdisk_sectors() || count > ramdisk_sectors() - lba)
+    if (buf == NULL || !range_ok(lba, count))
         return false;
 
     memcpy(buf, (const void *)(RAMDISK_WINDOW_START + lba * RAMDISK_SECTOR_SIZE),
+           count * RAMDISK_SECTOR_SIZE);
+    return true;
+}
+
+bool_t ramdisk_write(uint32_t lba, uint32_t count, const void *buf)
+{
+    if (buf == NULL || !range_ok(lba, count))
+        return false;
+
+    memcpy((void *)(RAMDISK_WINDOW_START + lba * RAMDISK_SECTOR_SIZE), buf,
            count * RAMDISK_SECTOR_SIZE);
     return true;
 }
