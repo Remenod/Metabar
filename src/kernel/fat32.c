@@ -487,6 +487,16 @@ static bool_t resolve_within(const char *path, uint32_t limit, fat32_entry_t *en
         if (cluster == 0) // ".." of a top level directory points at the root this way
             cluster = fs.root_cluster;
 
+        // root . n .. stuff
+        const bool_t here = names_equal(".", path + i, length);
+        const bool_t up = names_equal("..", path + i, length);
+
+        if (here || (up && cluster == fs.root_cluster))
+        {
+            i += length;
+            continue;
+        }
+
         if (!find_in_directory(cluster, path + i, length, entry))
             return false;
 
