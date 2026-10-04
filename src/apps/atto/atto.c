@@ -72,9 +72,22 @@ static void status(const char *path, const char *message)
     put_string(STATUS + 34 + strlen(number) + 1, "bytes");
 
     if (modified)
-        put_string(STATUS + 48, "modified");
+        put_string(STATUS + 46, "modified"); // the size can reach "32768 bytes", which ends at 44
 
-    put_string(STATUS + 58, message);
+    put_string(STATUS + 55, message); // and the hint is as wide as the line has room for
+}
+
+/* A question needs the whole status line: put at the right hand end, like a hint, it would run
+ * off the screen and be cut in half. */
+static void prompt(const char *question)
+{
+    for (uint16_t i = 0; i < COLUMNS; i++)
+    {
+        put_char(STATUS + i, ' ');
+        put_attr(STATUS + i, STATUS_ATTR);
+    }
+
+    put_string(STATUS + 1, question);
 }
 
 static void refresh(const char *path, const char *message)
@@ -106,15 +119,29 @@ static void insert(char c)
     modified = true;
 }
 
-static void erase(void)
+static void erase_range(uint32_t from, uint32_t to)
 {
-    if (cursor == 0)
+    if (from >= to)
         return;
 
-    memmove(text + cursor - 1, text + cursor, length - cursor);
-    cursor--;
-    length--;
+    memmove(text + from, text + to, length - to);
+    length -= to - from;
+    cursor = from;
     modified = true;
+}
+
+// the start of the word before the cursor, which is what ctrl takes back; the line end stops it
+static uint32_t word_start(void)
+{
+    uint32_t at = cursor;
+
+    while (at > 0 && text[at - 1] == ' ')
+        at--;
+
+    while (at > 0 && text[at - 1] != ' ' && text[at - 1] != '\n')
+        at--;
+
+    return at;
 }
 
 static uint32_t line_start(uint32_t at)
@@ -158,6 +185,15 @@ static void move_line(bool_t down)
     cursor = target + column < end ? target + column : end;
 }
 
+static const char *save(const char *path)
+{
+    if (fat32_write_file(path, text, length) != length)
+        return "could not save";
+
+    modified = false;
+    return "saved";
+}
+
 static char wait_key(void)
 {
     char c = 0;
@@ -171,7 +207,7 @@ static char wait_key(void)
 void atto_main(const char *path)
 {
     fat32_entry_t entry;
-    const char *message = "Esc = menu";
+    const char *message = "^S save ^X exit Esc menu";
 
     length = 0;
     cursor = 0;
@@ -199,13 +235,24 @@ void atto_main(const char *path)
     for (;;)
     {
         refresh(path, message);
-        message = "Esc = menu";
+        message = "^S save ^X exit Esc menu";
 
         const char key = wait_key();
 
-        if (key == KEY_ESC)
+        if (key == KEY_CTRL_S)
         {
-            status(path, "s = save   q = quit   anything else = back");
+            message = save(path);
+            continue;
+        }
+
+        /* Leaving with something unsaved is the one thing worth stopping for, so ctrl x asks, and
+         * goes straight out when there is nothing to lose. */
+        if (key == KEY_CTRL_X)
+        {
+            if (!modified)
+                break;
+
+            prompt("leave: s = save and go   q = go anyway   anything else = back");
 
             const char choice = wait_key();
 
@@ -214,16 +261,25 @@ void atto_main(const char *path)
 
             if (choice == 's')
             {
-                if (fat32_write_file(path, text, length) == length)
-                {
-                    modified = false;
-                    message = "saved";
-                }
-                else
-                {
-                    message = "could not save";
-                }
+                message = save(path);
+                if (!modified)
+                    break;
             }
+
+            continue;
+        }
+
+        if (key == KEY_ESC)
+        {
+            prompt("s = save   q = quit   anything else = back");
+
+            const char choice = wait_key();
+
+            if (choice == 'q')
+                break;
+
+            if (choice == 's')
+                message = save(path);
 
             continue;
         }
@@ -231,7 +287,21 @@ void atto_main(const char *path)
         switch (key)
         {
         case '\b':
-            erase();
+            if (cursor > 0)
+                erase_range(cursor - 1, cursor);
+            break;
+        case KEY_DELETE:
+            if (cursor < length)
+                erase_range(cursor, cursor + 1);
+            break;
+        case KEY_ERASE_WORD:
+            erase_range(word_start(), cursor);
+            break;
+        case KEY_HOME:
+            cursor = line_start(cursor);
+            break;
+        case KEY_END:
+            cursor = line_end(cursor);
             break;
         case '\t':
             for (uint32_t i = 0; i < 4; i++)

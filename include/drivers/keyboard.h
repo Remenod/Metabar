@@ -10,6 +10,8 @@
 #define KEY_END 6
 #define KEY_DELETE 7
 #define KEY_ERASE_WORD 23 // ctrl held with backspace, or with w
+#define KEY_CTRL_S 19     // the numbers are the control codes these have always stood for
+#define KEY_CTRL_X 24
 
 #define KEY_ESC 27
 

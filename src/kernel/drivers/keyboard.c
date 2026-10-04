@@ -111,8 +111,15 @@ void keyboard_handler(const cpu_state_t *state)
     {
         char c = scancode_ascii[scancode];
 
-        if (ctrl && (c == '\b' || c == 'w' || c == 'W'))
-            c = KEY_ERASE_WORD;
+        if (ctrl)
+        {
+            if (c == '\b' || c == 'w' || c == 'W')
+                c = KEY_ERASE_WORD;
+            else if (c == 's' || c == 'S')
+                c = KEY_CTRL_S;
+            else if (c == 'x' || c == 'X')
+                c = KEY_CTRL_X;
+        }
 
         if (c)
             last_char = c;
