@@ -19,7 +19,17 @@
 #define FUEL_ROW (HEIGHT - 1)
 
 #define SHADES 16 // the whole palette becomes one ramp from black through red to white
-#define FRAMES_PER_SECOND 50
+
+// --- the knobs: how the fire behaves is decided here, and the colour of it by fire_ramp below
+
+#define FRAMES_PER_SECOND 50 // how often it is stepped and drawn again
+
+#define FIRE_COOLING 10     // the most a cell loses on the way up, so the height: lower is taller
+#define FIRE_AVERAGE_OVER 4 // four went into the sum, so four is neutral: five fades, three floods
+#define FUEL_DRIFT 25       // how far a column wanders in a frame: low is lazy, high is flickery
+#define FUEL_AT_START 255   // the hottest a column may be at the moment it is lit
+#define FLARE_FADE 6        // how much of a note's surge goes every tick: higher is a sharper beat
+#define FLARE_SHARE 2       // the surge is halved this many times before it reaches the fuel
 
 typedef struct
 {
@@ -82,7 +92,7 @@ static void tick(void)
             frames_due++;
     }
 
-    flare = flare > 4 ? (uint8_t)(flare - 4) : 0;
+    flare = flare > FLARE_FADE ? (uint8_t)(flare - FLARE_FADE) : 0;
 
     if (notes == NULL || phase_left-- > 0)
         return;
@@ -106,7 +116,7 @@ static void step_fire(void)
 {
     for (uint32_t x = 0; x < WIDTH; x++)
     {
-        const int32_t drift = (int32_t)random_next_bounded(&rng, 61) - 30;
+        const int32_t drift = (int32_t)random_next_bounded(&rng, FUEL_DRIFT * 2 + 1) - FUEL_DRIFT;
         int32_t burning = (int32_t)fuel[x] + drift;
 
         if (burning < 0)
@@ -116,7 +126,7 @@ static void step_fire(void)
 
         fuel[x] = (uint8_t)burning;
 
-        const uint32_t hot = (uint32_t)burning + (flare >> 2);
+        const uint32_t hot = (uint32_t)burning + (flare >> FLARE_SHARE);
         heat[FUEL_ROW][x] = (uint8_t)(hot > 255 ? 255 : hot);
     }
 
@@ -128,8 +138,8 @@ static void step_fire(void)
             const uint32_t middle = heat[y + 1][x];
             const uint32_t right = heat[y + 1][x + 1 == WIDTH ? 0 : x + 1];
             const uint32_t under = heat[y + 2 < HEIGHT ? y + 2 : FUEL_ROW][x];
-            const uint32_t average = (left + middle + right + under) / 4;
-            const uint32_t cooling = random_next_bounded(&rng, 11);
+            const uint32_t average = (left + middle + right + under) / FIRE_AVERAGE_OVER;
+            const uint32_t cooling = random_next_bounded(&rng, FIRE_COOLING);
 
             heat[y][x] = (uint8_t)(average > cooling ? average - cooling : 0);
         }
@@ -285,7 +295,7 @@ void screensaver_main(const char *music_path)
             heat[y][x] = 0;
 
     for (uint32_t x = 0; x < WIDTH; x++)
-        fuel[x] = (uint8_t)random_next(&rng);
+        fuel[x] = (uint8_t)random_next_bounded(&rng, FUEL_AT_START + 1);
 
     frames_due = 0;
     frame_countdown = get_timer_frequency() / FRAMES_PER_SECOND;
