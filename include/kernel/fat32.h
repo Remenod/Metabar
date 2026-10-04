@@ -1,6 +1,7 @@
 #pragma once
 
 #include <lib/types.h>
+#include <kernel/block.h>
 
 // 255 characters is the longest name FAT32 stores, in 20 pieces of 13
 #define FAT32_MAX_NAME 261
@@ -28,6 +29,11 @@ bool_t fat32_mount_device(const block_device_t *device);
 void fat32_unmount(void);
 
 bool_t fat32_mounted(void);
+const block_device_t *fat32_device(void); // what is mounted, NULL when nothing is
+
+uint32_t fat32_total_clusters(void);
+uint32_t fat32_free_clusters(void);
+uint32_t fat32_cluster_size(void); // in bytes
 
 // paths are absolute, '/' separated, and compared without regard to case: "/dir/file.txt"
 bool_t fat32_open_dir(const char *path, fat32_dir_t *dir);

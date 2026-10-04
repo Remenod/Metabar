@@ -3,6 +3,7 @@
 #include <lib/types.h>
 
 #define BLOCK_SECTOR_SIZE 512
+#define BLOCK_MAX_DEVICES 4
 
 typedef struct block_device
 {
@@ -12,13 +13,17 @@ typedef struct block_device
     bool_t (*write)(uint32_t lba, uint32_t count, const void *buf); // NULL when the device is read only
 } block_device_t;
 
-// the device filesystems are read from; NULL until a driver registers one
-const block_device_t *block_device(void);
-
+// every driver that can hold a filesystem puts itself on the list at boot
 void block_register(const block_device_t *device);
 
-// reads through the registered device; false if there is none or the range is outside it
-bool_t block_read(uint32_t lba, uint32_t count, void *buf);
+uint32_t block_count(void);
+const block_device_t *block_at(uint32_t index);
+const block_device_t *block_find(const char *name);
 
-// writes through the registered device; false if it cannot write or the range is outside it
+// the device reads and writes go to; NULL until a filesystem picks one
+const block_device_t *block_device(void);
+void block_select(const block_device_t *device);
+
+// read and write through the selected device; false if there is none or the range is outside it
+bool_t block_read(uint32_t lba, uint32_t count, void *buf);
 bool_t block_write(uint32_t lba, uint32_t count, const void *buf);

@@ -288,6 +288,26 @@ bool_t fat32_mounted(void)
     return fs.mounted;
 }
 
+const block_device_t *fat32_device(void)
+{
+    return fs.mounted ? block_device() : NULL;
+}
+
+uint32_t fat32_total_clusters(void)
+{
+    return fs.mounted ? fs.cluster_count : 0;
+}
+
+uint32_t fat32_free_clusters(void)
+{
+    return fs.mounted ? fs.free_count : 0;
+}
+
+uint32_t fat32_cluster_size(void)
+{
+    return fs.mounted ? fs.sectors_per_cluster * BLOCK_SECTOR_SIZE : 0;
+}
+
 // the 8.3 name as stored: padded with spaces and without the dot
 static void format_short_name(const uint8_t *entry, char *out)
 {
