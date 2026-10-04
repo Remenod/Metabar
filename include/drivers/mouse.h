@@ -29,3 +29,7 @@ void reset_ui_structure(void);
 void reset_ui_layer(uint8_t layer);
 
 void mouse_install(void);
+
+// where the pointer stands, in pixels, for a UI that wants to react before anything is clicked
+uint16_t mouse_cursor_x(void);
+uint16_t mouse_cursor_y(void);

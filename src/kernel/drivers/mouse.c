@@ -23,7 +23,7 @@
 #define MOUSE_CHAR_3 0xC2
 #define MOUSE_CHAR_4 0xC3
 
-static uint16_t mouse_x = 0, mouse_y = 0;
+static volatile uint16_t mouse_x = 0, mouse_y = 0; // written from the mouse interrupt
 
 static mouse_packet_t last_packet;
 static uint8_t cursor_cover_buf[4], packets_buf[3], mouse_packet_index = 0;
@@ -278,6 +278,16 @@ static void ps2_mouse_write(uint8_t data)
     ps2_write_data(data);
     uint8_t ack = ps2_read_data();
     (void)ack;
+}
+
+uint16_t mouse_cursor_x(void)
+{
+    return mouse_x;
+}
+
+uint16_t mouse_cursor_y(void)
+{
+    return mouse_y;
 }
 
 void register_ui_element(uint8_t layer, mouse_ui_element_t ui_element)
