@@ -10,6 +10,7 @@
 #include "../segment_test/segment_test.h"
 #include "../mouse_playground/mouse_playground.h"
 #include "../settings_manager/settings_manager.h"
+#include "../shell/shell.h"
 
 #define SCREEN_WIDTH 80
 #define GLYPH_WIDTH 8
@@ -41,6 +42,7 @@ static App apps[] = {
     {"Segment Test", segment_test_main},
     {"Mouse Playground", mouse_playground_main},
     {"Settings", settings_manager_main},
+    {"Shell", shell_main},
 };
 
 #define APP_COUNT (uint8_t)(sizeof(apps) / sizeof(App))

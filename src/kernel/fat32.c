@@ -219,13 +219,8 @@ static bool_t read_bpb(uint32_t lba)
     return true;
 }
 
-bool_t fat32_mount(void)
+static bool_t probe(void)
 {
-    fs.mounted = false;
-
-    if (block_device() == NULL)
-        return false;
-
     if (read_bpb(0)) // a bare volume, like an image written by mkfs.vfat
         return true;
 
@@ -253,9 +248,64 @@ bool_t fat32_mount(void)
     return false;
 }
 
+void fat32_unmount(void)
+{
+    fs.mounted = false;
+    fat_cached = false;
+    dir_cached = false;
+    block_select(NULL);
+}
+
+bool_t fat32_mount_device(const block_device_t *device)
+{
+    fat32_unmount();
+
+    if (device == NULL)
+        return false;
+
+    block_select(device);
+
+    if (!probe())
+    {
+        fat32_unmount();
+        return false;
+    }
+
+    return true;
+}
+
+bool_t fat32_mount(void)
+{
+    for (uint32_t i = 0; i < block_count(); i++)
+        if (fat32_mount_device(block_at(i)))
+            return true;
+
+    return false;
+}
+
 bool_t fat32_mounted(void)
 {
     return fs.mounted;
+}
+
+const block_device_t *fat32_device(void)
+{
+    return fs.mounted ? block_device() : NULL;
+}
+
+uint32_t fat32_total_clusters(void)
+{
+    return fs.mounted ? fs.cluster_count : 0;
+}
+
+uint32_t fat32_free_clusters(void)
+{
+    return fs.mounted ? fs.free_count : 0;
+}
+
+uint32_t fat32_cluster_size(void)
+{
+    return fs.mounted ? fs.sectors_per_cluster * BLOCK_SECTOR_SIZE : 0;
 }
 
 // the 8.3 name as stored: padded with spaces and without the dot

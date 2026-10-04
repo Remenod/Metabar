@@ -144,9 +144,16 @@ void print_char(char c)
     if (c == '\n')
         cursor_pos += 80 - (cursor_pos % 80);
     else if (c == '\b')
-        put_char(--cursor_pos, 0);
+    {
+        if (cursor_pos > 0) // nothing to erase at the very start, and going below it wraps around
+            put_char(--cursor_pos, 0);
+    }
     else
         put_char(cursor_pos++, c);
+
+    if (cursor_pos > 1999)
+        scroll_down();
+
     set_vga_cursor_pos(cursor_pos);
 }
 
