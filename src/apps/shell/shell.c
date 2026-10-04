@@ -5,6 +5,7 @@
 #include <kernel/block.h>
 #include <kernel/fat32.h>
 #include <kernel/memory.h>
+#include <lib/mem.h>
 #include <lib/string.h>
 
 #include "../atto/atto.h"
@@ -875,7 +876,8 @@ static void cmd_help(uint32_t argc, char **argv)
 
     print("names with spaces go in quotes: cat \"Loader Notes.txt\"\n");
     print("* stands for any part of a name, ** for any run of directories: rm **/*.tmp\n");
-    print("Tab finishes a word, Up and Down walk back through what was typed\n\n");
+    print("Tab finishes a word, Up and Down walk back through what was typed\n");
+    print("the line can be moved around in with the arrows\n\n");
 
     for (uint32_t i = 0; i < COMMAND_COUNT; i++)
     {
@@ -911,18 +913,91 @@ static void history_add(const char *line)
     strcpy(history[history_count++], line);
 }
 
-// rubs out what stands on the line and puts something else in its place
-static void replace_line(char *line, uint32_t *length, const char *with)
-{
-    while (*length > 0)
-    {
-        print_char('\b');
-        (*length)--;
-    }
+/* --- the line, as something that can be moved around in --------------------------------------- */
 
-    strcpy(line, with);
-    *length = strlen(line);
-    print(line);
+typedef struct
+{
+    char *text;       // always terminated, so that drawing it is one call
+    uint32_t length;
+    uint32_t cursor;  // between 0 and length: where the next character would land
+    uint32_t origin;  // the cell the line starts in, just past the prompt
+    uint32_t painted; // how far the last drawing reached, so a shorter line rubs out its old tail
+} editor_t;
+
+/* Draws the line and puts the hardware cursor inside it. Drawing can push the screen up a line,
+ * and the line travels up with it, so where it begins is worked out again from where the printing
+ * ended rather than remembered from the start. */
+static void edit_draw(editor_t *e)
+{
+    const uint32_t reach = e->length > e->painted ? e->length : e->painted;
+
+    set_vga_cursor_pos((uint16_t)e->origin);
+    print(e->text);
+
+    for (uint32_t i = e->length; i < e->painted; i++)
+        print_char(' ');
+
+    const uint32_t expected = e->origin + reach;
+    const uint32_t ended = get_vga_cursor_pos();
+
+    if (ended < expected)
+        e->origin -= expected - ended;
+
+    e->painted = e->length;
+    set_vga_cursor_pos((uint16_t)(e->origin + e->cursor));
+}
+
+static void edit_move(editor_t *e, uint32_t to)
+{
+    e->cursor = to;
+    set_vga_cursor_pos((uint16_t)(e->origin + e->cursor));
+}
+
+static void edit_insert(editor_t *e, char c)
+{
+    if (e->length + 1 >= LINE_MAX)
+        return;
+
+    memmove(e->text + e->cursor + 1, e->text + e->cursor, e->length - e->cursor + 1);
+    e->text[e->cursor++] = c;
+    e->length++;
+    edit_draw(e);
+}
+
+static void edit_insert_text(editor_t *e, const char *text, uint32_t from)
+{
+    for (uint32_t i = from; text[i] != '\0'; i++)
+        edit_insert(e, text[i]);
+}
+
+// takes out what lies between two places and leaves the cursor where the gap closed
+static void edit_erase(editor_t *e, uint32_t from, uint32_t to)
+{
+    if (from >= to)
+        return;
+
+    memmove(e->text + from, e->text + to, e->length - to + 1);
+    e->length -= to - from;
+    e->cursor = from;
+    edit_draw(e);
+}
+
+static void edit_set(editor_t *e, const char *with)
+{
+    strcpy(e->text, with);
+    e->length = strlen(e->text);
+    e->cursor = e->length;
+    edit_draw(e);
+}
+
+// puts the prompt back under a listing and draws the line into it again
+static void show_line_again(editor_t *e)
+{
+    print(cwd);
+    print("> ");
+    e->origin = get_vga_cursor_pos();
+    e->painted = 0;
+    edit_draw(e);
 }
 
 static bool_t starts_with(const char *name, const char *prefix, uint32_t length)
@@ -934,26 +1009,10 @@ static bool_t starts_with(const char *name, const char *prefix, uint32_t length)
     return true;
 }
 
-static void add_to_line(char *line, uint32_t *length, const char *text, uint32_t from)
-{
-    for (uint32_t i = from; text[i] != '\0' && *length + 1 < LINE_MAX; i++)
-    {
-        line[(*length)++] = text[i];
-        print_char(text[i]);
-    }
-}
-
-static void show_prompt(const char *line)
-{
-    print(cwd);
-    print("> ");
-    print(line);
-}
-
-/* Finishes the word the line ends with: a command when it is the first word, a name out of the
- * directory the word points into otherwise. One match is filled in, several are only listed -
- * working out how much of them is common is more than this is meant to do. */
-static void complete(char *line, uint32_t *length)
+/* Finishes the word the cursor stands at the end of: a command when it is the first word on the
+ * line, a name out of the directory the word points into otherwise. One match is filled in,
+ * several are only listed - working out how much of them is shared is more than this is for. */
+static void complete(editor_t *e)
 {
     char path[PATH_MAX];
     char head[PATH_MAX];
@@ -962,12 +1021,12 @@ static void complete(char *line, uint32_t *length)
     fat32_dir_t dir;
     uint32_t matches = 0;
 
-    uint32_t start = *length;
-    while (start > 0 && line[start - 1] != ' ')
+    uint32_t start = e->cursor;
+    while (start > 0 && e->text[start - 1] != ' ')
         start--;
 
-    const char *word = line + start;
-    const uint32_t word_length = *length - start;
+    const char *word = e->text + start;
+    const uint32_t word_length = e->cursor - start;
 
     if (start == 0) // the first word on the line names a command
     {
@@ -982,8 +1041,8 @@ static void complete(char *line, uint32_t *length)
 
         if (matches == 1)
         {
-            add_to_line(line, length, commands[found].name, word_length);
-            add_to_line(line, length, " ", 0);
+            edit_insert_text(e, commands[found].name, word_length);
+            edit_insert(e, ' ');
             return;
         }
 
@@ -999,11 +1058,11 @@ static void complete(char *line, uint32_t *length)
             }
 
         print_char('\n');
-        show_prompt(line);
+        show_line_again(e);
         return;
     }
 
-    // the word is a name: what comes before its last slash says which directory to look in
+    // the word is a name: what stands before its last slash says which directory to look in
     uint32_t cut = word_length;
     while (cut > 0 && word[cut - 1] != '/')
         cut--;
@@ -1037,8 +1096,8 @@ static void complete(char *line, uint32_t *length)
 
     if (matches == 1)
     {
-        add_to_line(line, length, match, prefix_length);
-        add_to_line(line, length, match_is_dir ? "/" : " ", 0);
+        edit_insert_text(e, match, prefix_length);
+        edit_insert(e, match_is_dir ? '/' : ' ');
         return;
     }
 
@@ -1055,13 +1114,15 @@ static void complete(char *line, uint32_t *length)
         }
 
     print_char('\n');
-    show_prompt(line);
+    show_line_again(e);
 }
 
 static void read_line(char *line)
 {
-    uint32_t length = 0;
+    editor_t editor = {line, 0, 0, get_vga_cursor_pos(), 0};
     uint32_t browse = history_count; // where the arrows stand, the far end being the new line
+
+    line[0] = '\0';
 
     for (;;)
     {
@@ -1069,56 +1130,52 @@ static void read_line(char *line)
         while (!(c = get_keyboard_char()))
             asm volatile("hlt");
 
-        if (c == KEY_ESC)
+        switch (c)
         {
-            running = false;
+        case KEY_ESC:
             line[0] = '\0';
+            running = false;
             return;
-        }
 
-        if (c == '\n')
-        {
+        case '\n':
+            edit_move(&editor, editor.length); // so that the new line starts past all of this one
             print_char('\n');
-            line[length] = '\0';
             history_add(line);
             return;
-        }
 
-        if (c == '\t')
-        {
-            line[length] = '\0';
-            complete(line, &length);
-            continue;
-        }
+        case '\t':
+            complete(&editor);
+            break;
 
-        if (c == KEY_UP && browse > 0)
-        {
-            browse--;
-            replace_line(line, &length, history[browse]);
-            continue;
-        }
+        case '\b':
+            if (editor.cursor > 0)
+                edit_erase(&editor, editor.cursor - 1, editor.cursor);
+            break;
 
-        if (c == KEY_DOWN && browse < history_count)
-        {
-            browse++;
-            replace_line(line, &length, browse == history_count ? "" : history[browse]);
-            continue;
-        }
+        case KEY_LEFT:
+            if (editor.cursor > 0)
+                edit_move(&editor, editor.cursor - 1);
+            break;
 
-        if (c == '\b')
-        {
-            if (length > 0)
-            {
-                length--;
-                print_char('\b');
-            }
-            continue;
-        }
+        case KEY_RIGHT:
+            if (editor.cursor < editor.length)
+                edit_move(&editor, editor.cursor + 1);
+            break;
 
-        if (c >= ' ' && length + 1 < LINE_MAX)
-        {
-            line[length++] = c;
-            print_char(c);
+        case KEY_UP:
+            if (browse > 0)
+                edit_set(&editor, history[--browse]);
+            break;
+
+        case KEY_DOWN:
+            if (browse < history_count)
+                edit_set(&editor, ++browse == history_count ? "" : history[browse]);
+            break;
+
+        default:
+            if (c >= ' ')
+                edit_insert(&editor, c);
+            break;
         }
     }
 }
