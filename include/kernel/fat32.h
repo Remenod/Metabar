@@ -35,6 +35,9 @@ bool_t fat32_stat(const char *path, fat32_entry_t *entry);
 // copies at most max_bytes from the start of the file; returns how many bytes were copied
 uint32_t fat32_read_file(const char *path, void *buf, uint32_t max_bytes);
 
+// the same, starting `offset` bytes into the file, which is how a file larger than a buffer is read
+uint32_t fat32_read_at(const char *path, uint32_t offset, void *buf, uint32_t max_bytes);
+
 /* Writes a whole file at once: creates it when it is not there and replaces what it held when it
  * is. Returns how many bytes landed on the volume, which is either `size` or nothing at all. */
 uint32_t fat32_write_file(const char *path, const void *buf, uint32_t size);

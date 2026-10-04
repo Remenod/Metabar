@@ -527,34 +527,62 @@ bool_t fat32_open_dir(const char *path, fat32_dir_t *dir)
     return true;
 }
 
-uint32_t fat32_read_file(const char *path, void *buf, uint32_t max_bytes)
+uint32_t fat32_read_at(const char *path, uint32_t offset, void *buf, uint32_t max_bytes)
 {
     fat32_entry_t entry;
 
     if (buf == NULL || max_bytes == 0 || !resolve(path, &entry) || entry.is_dir)
         return 0;
 
-    uint32_t left = entry.size < max_bytes ? entry.size : max_bytes;
-    uint32_t done = 0;
+    if (offset >= entry.size)
+        return 0;
+
+    uint32_t left = entry.size - offset;
+    if (left > max_bytes)
+        left = max_bytes;
+
+    const uint32_t cluster_bytes = fs.sectors_per_cluster * BLOCK_SECTOR_SIZE;
     uint32_t cluster = entry.first_cluster;
+
+    for (uint32_t skip = offset / cluster_bytes; skip > 0; skip--)
+    {
+        if (!cluster_valid(cluster))
+            return 0;
+        cluster = next_cluster(cluster);
+    }
+
+    uint32_t sector = offset % cluster_bytes / BLOCK_SECTOR_SIZE;
+    uint32_t at = offset % BLOCK_SECTOR_SIZE; // only the first sector of a read starts part way in
+    uint32_t done = 0;
 
     while (left > 0 && cluster_valid(cluster))
     {
-        for (uint32_t sector = 0; sector < fs.sectors_per_cluster && left > 0; sector++)
+        while (sector < fs.sectors_per_cluster && left > 0)
         {
+            uint32_t chunk = BLOCK_SECTOR_SIZE - at;
+            if (chunk > left)
+                chunk = left;
+
             if (!read_dir_sector(cluster_lba(cluster) + sector))
                 return done;
 
-            const uint32_t chunk = left < BLOCK_SECTOR_SIZE ? left : BLOCK_SECTOR_SIZE;
-            memcpy((uint8_t *)buf + done, dir_cache, chunk);
+            memcpy((uint8_t *)buf + done, dir_cache + at, chunk);
             done += chunk;
             left -= chunk;
+            at = 0;
+            sector++;
         }
 
+        sector = 0;
         cluster = next_cluster(cluster);
     }
 
     return done;
+}
+
+uint32_t fat32_read_file(const char *path, void *buf, uint32_t max_bytes)
+{
+    return fat32_read_at(path, 0, buf, max_bytes);
 }
 
 /* --- writing -------------------------------------------------------------------------------- */
