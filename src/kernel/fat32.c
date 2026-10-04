@@ -1214,3 +1214,95 @@ bool_t fat32_remove(const char *path)
     update_fsinfo();
     return true;
 }
+
+/* Tells a directory which one is above it now. The pair every directory starts with is written by
+ * whoever created it, and ".." is the only part of it that a move has to correct. */
+static bool_t set_parent(uint32_t dir_cluster, uint32_t parent)
+{
+    if (!read_dir_sector(cluster_lba(dir_cluster)))
+        return false;
+
+    for (uint32_t index = 0; index < ENTRIES_PER_SECTOR; index++)
+    {
+        uint8_t *raw = dir_cache + index * DIR_ENTRY_SIZE;
+
+        if (raw[0] != '.' || raw[1] != '.')
+            continue;
+
+        const uint32_t cluster = parent == fs.root_cluster ? 0 : parent; // the root is written as zero
+        put16(raw + 20, (uint16_t)(cluster >> 16));
+        put16(raw + 26, (uint16_t)cluster);
+        return block_write(dir_cache_lba, 1, dir_cache);
+    }
+
+    return false;
+}
+
+/* Walks from a directory up to the root looking for one particular cluster on the way. A directory
+ * moved inside its own subtree would hang off nothing and take the subtree with it. */
+static bool_t outside_subtree(uint32_t cluster, uint32_t forbidden)
+{
+    fat32_entry_t up;
+
+    for (uint32_t depth = 0; depth < 64; depth++)
+    {
+        if (cluster == forbidden)
+            return false;
+
+        if (cluster == fs.root_cluster)
+            return true;
+
+        if (!find_in_directory(cluster, "..", 2, &up))
+            return false;
+
+        cluster = up.first_cluster == 0 ? fs.root_cluster : up.first_cluster;
+    }
+
+    return false; // a chain this deep is a volume that lies about its own shape
+}
+
+bool_t fat32_rename(const char *from, const char *to)
+{
+    fat32_entry_t entry;
+    fat32_entry_t target;
+    const char *from_name;
+    const char *to_name;
+    uint32_t from_dir;
+    uint32_t to_dir;
+
+    if (!split_path(from, &from_dir, &from_name) || !split_path(to, &to_dir, &to_name))
+        return false;
+
+    if (!find_in_directory(from_dir, from_name, strlen(from_name), &entry))
+        return false;
+
+    const fat32_dir_t first = found_first; // both only mean anything right after the search above
+    const fat32_dir_t last = found_short;
+
+    /* A name that is taken belongs to whoever has it, and it is for the caller to decide what to
+     * do about that. The one exception is the entry being renamed itself, which is how a name gets
+     * its upper and lower case changed: the search ignores case, so it answers with that entry. */
+    if (find_in_directory(to_dir, to_name, strlen(to_name), &target) &&
+        !(found_short.cluster == last.cluster && found_short.sector == last.sector &&
+          found_short.index == last.index))
+        return false;
+
+    if (entry.is_dir && !outside_subtree(to_dir, entry.first_cluster))
+        return false;
+
+    /* Only the records that name the contents move; the contents stay where they are, which is why
+     * this costs the same for a byte and for a gigabyte. The new name is written before the old one
+     * goes, so that a failure in between leaves the entry reachable rather than lost. */
+    if (!create_entry(to_dir, to_name, entry.is_dir ? ATTR_DIRECTORY : ATTR_ARCHIVE, entry.first_cluster,
+                      entry.size))
+        return false;
+
+    if (!free_records(first, last))
+        return false;
+
+    if (entry.is_dir && from_dir != to_dir && !set_parent(entry.first_cluster, to_dir))
+        return false;
+
+    update_fsinfo();
+    return true;
+}
