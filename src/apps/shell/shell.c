@@ -875,7 +875,7 @@ static void cmd_help(uint32_t argc, char **argv)
 
     print("names with spaces go in quotes: cat \"Loader Notes.txt\"\n");
     print("* stands for any part of a name, ** for any run of directories: rm **/*.tmp\n");
-    print("Up and Down walk back through what was typed\n\n");
+    print("Tab finishes a word, Up and Down walk back through what was typed\n\n");
 
     for (uint32_t i = 0; i < COMMAND_COUNT; i++)
     {
@@ -925,6 +925,139 @@ static void replace_line(char *line, uint32_t *length, const char *with)
     print(line);
 }
 
+static bool_t starts_with(const char *name, const char *prefix, uint32_t length)
+{
+    for (uint32_t i = 0; i < length; i++)
+        if (name[i] == '\0' || upper(name[i]) != upper(prefix[i]))
+            return false;
+
+    return true;
+}
+
+static void add_to_line(char *line, uint32_t *length, const char *text, uint32_t from)
+{
+    for (uint32_t i = from; text[i] != '\0' && *length + 1 < LINE_MAX; i++)
+    {
+        line[(*length)++] = text[i];
+        print_char(text[i]);
+    }
+}
+
+static void show_prompt(const char *line)
+{
+    print(cwd);
+    print("> ");
+    print(line);
+}
+
+/* Finishes the word the line ends with: a command when it is the first word, a name out of the
+ * directory the word points into otherwise. One match is filled in, several are only listed -
+ * working out how much of them is common is more than this is meant to do. */
+static void complete(char *line, uint32_t *length)
+{
+    char path[PATH_MAX];
+    char head[PATH_MAX];
+    char match[FAT32_MAX_NAME];
+    fat32_entry_t entry;
+    fat32_dir_t dir;
+    uint32_t matches = 0;
+
+    uint32_t start = *length;
+    while (start > 0 && line[start - 1] != ' ')
+        start--;
+
+    const char *word = line + start;
+    const uint32_t word_length = *length - start;
+
+    if (start == 0) // the first word on the line names a command
+    {
+        uint32_t found = 0;
+
+        for (uint32_t i = 0; i < COMMAND_COUNT; i++)
+            if (starts_with(commands[i].name, word, word_length))
+            {
+                matches++;
+                found = i;
+            }
+
+        if (matches == 1)
+        {
+            add_to_line(line, length, commands[found].name, word_length);
+            add_to_line(line, length, " ", 0);
+            return;
+        }
+
+        if (matches < 2)
+            return;
+
+        print_char('\n');
+        for (uint32_t i = 0; i < COMMAND_COUNT; i++)
+            if (starts_with(commands[i].name, word, word_length))
+            {
+                print(commands[i].name);
+                print("  ");
+            }
+
+        print_char('\n');
+        show_prompt(line);
+        return;
+    }
+
+    // the word is a name: what comes before its last slash says which directory to look in
+    uint32_t cut = word_length;
+    while (cut > 0 && word[cut - 1] != '/')
+        cut--;
+
+    for (uint32_t i = 0; i < cut; i++)
+        head[i] = word[i];
+    head[cut] = '\0';
+
+    const char *prefix = word + cut;
+    const uint32_t prefix_length = word_length - cut;
+
+    make_path(path, cut == 0 ? "." : head);
+
+    if (!fat32_mounted() || !fat32_open_dir(path, &dir))
+        return;
+
+    bool_t match_is_dir = false;
+
+    while (fat32_next_entry(&dir, &entry))
+    {
+        if (entry.name[0] == '.' || !starts_with(entry.name, prefix, prefix_length))
+            continue;
+
+        matches++;
+        strcpy(match, entry.name);
+        match_is_dir = entry.is_dir;
+    }
+
+    if (matches == 0)
+        return;
+
+    if (matches == 1)
+    {
+        add_to_line(line, length, match, prefix_length);
+        add_to_line(line, length, match_is_dir ? "/" : " ", 0);
+        return;
+    }
+
+    print_char('\n');
+
+    if (fat32_open_dir(path, &dir))
+        while (fat32_next_entry(&dir, &entry))
+        {
+            if (entry.name[0] == '.' || !starts_with(entry.name, prefix, prefix_length))
+                continue;
+
+            print(entry.name);
+            print("  ");
+        }
+
+    print_char('\n');
+    show_prompt(line);
+}
+
 static void read_line(char *line)
 {
     uint32_t length = 0;
@@ -949,6 +1082,13 @@ static void read_line(char *line)
             line[length] = '\0';
             history_add(line);
             return;
+        }
+
+        if (c == '\t')
+        {
+            line[length] = '\0';
+            complete(line, &length);
+            continue;
         }
 
         if (c == KEY_UP && browse > 0)
