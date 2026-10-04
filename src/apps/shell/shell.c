@@ -11,6 +11,7 @@
 #include <lib/string.h>
 
 #include "../atto/atto.h"
+#include "../screensaver/screensaver.h"
 
 #define LINE_MAX 256
 #define PATH_MAX 256
@@ -1103,6 +1104,23 @@ static void cmd_run(uint32_t argc, char **argv)
         print("run: stopped\n");
 }
 
+#define SAVER_MUSIC "/MUSIC/minecraft/minecraft.sh"
+
+static void cmd_saver(uint32_t argc, char **argv)
+{
+    char path[PATH_MAX];
+    const char *name = operand(argc, argv, 0);
+
+    if (name == NULL)
+    {
+        screensaver_main(SAVER_MUSIC); // what it burns to when nothing else is asked for
+        return;
+    }
+
+    make_path(path, name);
+    screensaver_main(path);
+}
+
 static void cmd_atto(uint32_t argc, char **argv)
 {
     char path[PATH_MAX];
@@ -1135,6 +1153,7 @@ static const command_t commands[] = {
     {"cat", cmd_cat, "cat <file>            show a file"},
     {"atto", cmd_atto, "atto <file>           edit a file"},
     {"run", cmd_run, "run [-v] <file>       do a file line by line"},
+    {"saver", cmd_saver, "saver [tune]          sleep the screen until a key"},
     {"touch", cmd_touch, "touch <file>          make an empty file"},
     {"mkdir", cmd_mkdir, "mkdir <name>          make a directory"},
     {"rm", cmd_rm, "rm [-r] <path>        delete"},

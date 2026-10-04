@@ -834,6 +834,50 @@ static void restore_glyphs_write_regs(glyph_regs_backup_t backup)
     outb(VGA_GC_DATA, backup.gc6);
 }
 
+#define DAC_READ_INDEX 0x3C7
+#define DAC_WRITE_INDEX 0x3C8
+#define DAC_DATA 0x3C9
+
+#define ATTRIBUTE_INDEX 0x3C0
+#define ATTRIBUTE_READ 0x3C1
+#define INPUT_STATUS 0x3DA
+#define ATTRIBUTE_MODE 0x10
+#define KEEP_SCREEN_ON 0x20 // the bit of the index that tells the card it may keep drawing
+#define BLINK_BIT 0x08
+
+/* Text mode hands the sixteen attribute colours to the palette through this table, which is what
+ * the card is set up with at boot. */
+static const uint8_t dac_of_colour[16] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x14, 0x07,
+                                          0x38, 0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x3E, 0x3F};
+
+void vga_read_colour(uint8_t colour, uint8_t rgb[3])
+{
+    outb(DAC_READ_INDEX, dac_of_colour[colour & 0x0F]);
+
+    for (uint8_t i = 0; i < 3; i++)
+        rgb[i] = inb(DAC_DATA);
+}
+
+void vga_write_colour(uint8_t colour, const uint8_t rgb[3])
+{
+    outb(DAC_WRITE_INDEX, dac_of_colour[colour & 0x0F]);
+
+    for (uint8_t i = 0; i < 3; i++)
+        outb(DAC_DATA, rgb[i]);
+}
+
+void vga_set_blink(bool_t on)
+{
+    inb(INPUT_STATUS); // reading this puts the one register back to expecting an index
+    outb(ATTRIBUTE_INDEX, ATTRIBUTE_MODE | KEEP_SCREEN_ON);
+
+    const uint8_t mode = inb(ATTRIBUTE_READ);
+
+    inb(INPUT_STATUS);
+    outb(ATTRIBUTE_INDEX, ATTRIBUTE_MODE | KEEP_SCREEN_ON);
+    outb(ATTRIBUTE_INDEX, on ? (uint8_t)(mode | BLINK_BIT) : (uint8_t)(mode & ~BLINK_BIT));
+}
+
 void write_font(const uint8_t font[256][FONT_HEIGHT])
 {
     glyph_regs_backup_t backup = save_glyphs_write_regs();
