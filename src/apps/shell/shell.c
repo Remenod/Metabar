@@ -877,7 +877,8 @@ static void cmd_help(uint32_t argc, char **argv)
     print("names with spaces go in quotes: cat \"Loader Notes.txt\"\n");
     print("* stands for any part of a name, ** for any run of directories: rm **/*.tmp\n");
     print("Tab finishes a word, Up and Down walk back through what was typed\n");
-    print("the line can be moved around in with the arrows\n\n");
+    print("the line can be moved around in: arrows, Home and End, alt with an arrow,\n");
+    print("Delete, and ctrl with Backspace or with W to take back a word\n\n");
 
     for (uint32_t i = 0; i < COMMAND_COUNT; i++)
     {
@@ -980,6 +981,20 @@ static void edit_erase(editor_t *e, uint32_t from, uint32_t to)
     e->length -= to - from;
     e->cursor = from;
     edit_draw(e);
+}
+
+// the start of the word the cursor stands in or just behind, which is what ctrl takes back
+static uint32_t word_start(const editor_t *e)
+{
+    uint32_t at = e->cursor;
+
+    while (at > 0 && e->text[at - 1] == ' ')
+        at--;
+
+    while (at > 0 && e->text[at - 1] != ' ')
+        at--;
+
+    return at;
 }
 
 static void edit_set(editor_t *e, const char *with)
@@ -1152,6 +1167,15 @@ static void read_line(char *line)
                 edit_erase(&editor, editor.cursor - 1, editor.cursor);
             break;
 
+        case KEY_DELETE:
+            if (editor.cursor < editor.length)
+                edit_erase(&editor, editor.cursor, editor.cursor + 1);
+            break;
+
+        case KEY_ERASE_WORD:
+            edit_erase(&editor, word_start(&editor), editor.cursor);
+            break;
+
         case KEY_LEFT:
             if (editor.cursor > 0)
                 edit_move(&editor, editor.cursor - 1);
@@ -1160,6 +1184,14 @@ static void read_line(char *line)
         case KEY_RIGHT:
             if (editor.cursor < editor.length)
                 edit_move(&editor, editor.cursor + 1);
+            break;
+
+        case KEY_HOME:
+            edit_move(&editor, 0);
+            break;
+
+        case KEY_END:
+            edit_move(&editor, editor.length);
             break;
 
         case KEY_UP:
