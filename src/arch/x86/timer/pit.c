@@ -62,7 +62,10 @@ uint32_t get_timer_frequency(void)
 
 void sleep(uint32_t ms)
 {
-    uint64_t target = get_timer_ticks() + ms;
+    const uint32_t seconds = ms / 1000;
+    const uint32_t rest = ms % 1000;
+    const uint64_t target = get_timer_ticks() + (uint64_t)seconds * timer_frequency +
+                            (rest * timer_frequency + 999) / 1000;
     while (get_timer_ticks() < target)
         asm volatile("hlt");
 }
